@@ -42,6 +42,7 @@ import { answerDemoQuestion } from "./services/demoAssistant";
 import { useBackend } from "./backend/BackendProvider";
 import { ConnectionSettings } from "./backend/ConnectionSettings";
 import { requestAI, type AIResult } from "./services/api";
+import { useAuth } from "./auth/AuthProvider";
 export interface ContentProps {
   analyzed: string[];
   analysisResults: Record<string, AIResult>;
@@ -1727,9 +1728,10 @@ function SettingsPage({
   reset,
   toast,
 }: ContentProps) {
+  const {user}=useAuth();
   const { session } = useBackend();
   const [confirm, setConfirm] = useState(false);
-  const [name, setName] = useState("Julia Sommer");
+  const [name, setName] = useState(user!.name);
   return (
     <>
       <Heading
@@ -1740,12 +1742,12 @@ function SettingsPage({
       <div className="settings-layout">
         <ConnectionSettings />
         <section className="panel settings-panel">
-          <h2>Dein Demo-Profil</h2>
+          <h2>Dein Profil</h2>
           <div className="settings-profile">
-            <span className="avatar peach">JS</span>
+            <span className="avatar peach">{user!.initials}</span>
             <div>
-              <strong>Julia Sommer</strong>
-              <p>Produktionsleitung · Wiener Zucker</p>
+              <strong>{user!.name}</strong>
+              <p>{user!.position} · Wiener Zucker{user!.department?` · ${user!.department}`:''}{user!.line?` · ${user!.line}`:''}</p>
             </div>
           </div>
           <div className="form-grid">
@@ -1768,7 +1770,7 @@ function SettingsPage({
               <input
                 className="form-input"
                 id="profile-role"
-                value="Produktionsleitung"
+                value={user!.position}
                 readOnly
               />
             </div>

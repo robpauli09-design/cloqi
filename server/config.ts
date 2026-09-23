@@ -5,6 +5,7 @@ export interface ServerConfig {
   supabaseKey: string;
   allowedOrigins: string[];
   localDevelopment: boolean;
+  demoAiEnabled: boolean;
 }
 export function readConfig(
   env: NodeJS.ProcessEnv = process.env,
@@ -25,6 +26,7 @@ export function readConfig(
       .map((s) => s.trim())
       .filter(Boolean),
     localDevelopment,
+    demoAiEnabled: env.DEMO_AI_ENABLED === "true",
   };
 }
 export function hasSupabase(c: ServerConfig) {

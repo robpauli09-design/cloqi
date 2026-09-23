@@ -7,17 +7,20 @@ import { ApiError, getWorkspace, putWorkspace } from "../services/api";
 import { useBackend } from "./BackendProvider";
 import { supabase } from "./client";
 import { WorkspaceSync } from "./workspaceSync";
+import { useAuth } from "../auth/AuthProvider";
+import { initialTasksFor } from "../auth/users";
+import type { DemoUser } from "../auth/users";
 
-const storageKey = "kloqi-demo-v1";
-function localState(): WorkspaceState {
+const storageKeyFor = (user?:DemoUser) => !user || user.role==='management' ? 'kloqi-demo-v1' : `kloqi-demo-v1-${user.username}`;
+function localState(user?:DemoUser): WorkspaceState {
   try {
-    const raw = localStorage.getItem(storageKey);
-    if (raw) return parseWorkspace(JSON.parse(raw));
+    const raw = localStorage.getItem(storageKeyFor(user));
+    if (raw) {const parsed=parseWorkspace(JSON.parse(raw));return user&&user.role!=='management'?{...parsed,tasks:parsed.tasks.filter(task=>task.process==='packaging'&&task.person===user.name)}:parsed;}
   } catch {
     /* Keep the demo usable if local storage is unavailable or old. */
   }
   return parseWorkspace({
-    tasks: initialTasks,
+    tasks: user?initialTasksFor(user):initialTasks,
     mission: 0,
     analyzed: [],
     feedback: [
@@ -44,7 +47,9 @@ export function useOptionalWorkspace() {
   return useContext(WorkspaceContext);
 }
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const { session, authLoading } = useBackend();
+  if(user)return <WorkspaceStore key={user.username} record={null} demoUser={user}>{children}</WorkspaceStore>;
   if (authLoading)
     return (
       <div className="workspace-loading" role="status">
@@ -112,13 +117,15 @@ function WorkspaceLoader({ children }: { children: ReactNode }) {
 function WorkspaceStore({
   children,
   record,
+  demoUser,
 }: {
   children: ReactNode;
   record: WorkspaceRecord | null;
+  demoUser?: DemoUser;
 }) {
   const { session } = useBackend();
   const [state, setState] = useState<WorkspaceState>(
-    () => record?.state || localState(),
+    () => record?.state || localState(demoUser),
   );
   const [, redraw] = useState(0);
   const mounted = useRef(false);
@@ -157,7 +164,7 @@ function WorkspaceStore({
   useEffect(() => {
     if (!sync) {
       try {
-        localStorage.setItem(storageKey, JSON.stringify(state));
+        localStorage.setItem(storageKeyFor(demoUser), JSON.stringify(state));
       } catch {
         /* Visible app continues without browser persistence. */
       }
@@ -168,7 +175,7 @@ function WorkspaceStore({
       void sync.flush().catch(() => {});
     }, 350);
     return () => clearTimeout(timer);
-  }, [state, sync]);
+  }, [state, sync, demoUser]);
   useEffect(() => {
     if (!sync) return;
     const prevent = (event: BeforeUnloadEvent) => {

@@ -8,6 +8,7 @@ import { generateAI } from "./openai";
 import {
   authenticate,
   claimQuota,
+  claimDemoQuota,
   loadWorkspace,
   saveWorkspace,
 } from "./supabase";
@@ -26,6 +27,7 @@ const saveRequestSchema = z
 interface Dependencies {
   authenticate: typeof authenticate;
   claimQuota: typeof claimQuota;
+  claimDemoQuota: typeof claimDemoQuota;
   generateAI: typeof generateAI;
   loadWorkspace: typeof loadWorkspace;
   saveWorkspace: typeof saveWorkspace;
@@ -166,6 +168,7 @@ async function readJson(request: Request, limit: number): Promise<unknown> {
 const methods: Record<string, string[]> = {
   "/api/status": ["GET"],
   "/api/ai": ["POST"],
+  "/api/demo-ai": ["POST"],
   "/api/workspace": ["GET", "PUT"],
 };
 
@@ -173,6 +176,7 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
     authenticate,
     claimQuota,
+    claimDemoQuota,
     generateAI,
     loadWorkspace,
     saveWorkspace,
@@ -241,6 +245,7 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
       }
       if (path === "/api/status") {
         const status: BackendStatus = {
+          demoAiEnabled: Boolean(config.demoAiEnabled && config.openaiKey && hasSupabase(config)),
           aiConfigured: Boolean(config.openaiKey),
           authConfigured: hasSupabase(config),
           authRequired: !config.localDevelopment || hasSupabase(config),
@@ -249,7 +254,9 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
         };
         return json(status);
       }
-      if (path === "/api/ai") {
+      if (path === "/api/ai" || path === "/api/demo-ai") {
+        const demo = path === "/api/demo-ai";
+        if (demo && !config.demoAiEnabled) throw new HttpError(403,"demo_disabled","Die echte Demo-KI ist noch nicht freigeschaltet.");
         if (!config.localDevelopment && !hasSupabase(config)) {
           throw new HttpError(
             503,
@@ -273,13 +280,16 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
             "invalid_ai_request",
             "Die KI-Anfrage enthält ungültige oder zu viele Daten.",
           );
-        if (hasSupabase(config)) {
+        let demoRemaining: number | undefined;
+        if (demo) {
+          demoRemaining = await dependencies.claimDemoQuota(config);
+        } else if (hasSupabase(config)) {
           const auth = await dependencies.authenticate(request, config);
           await dependencies.claimQuota(auth);
         } else {
           claimLocalQuota();
         }
-        return json(await dependencies.generateAI(parsed.data, config));
+        return json({...await dependencies.generateAI(parsed.data, config), ...(demoRemaining === undefined ? {} : {demoRemaining})});
       }
       const auth = await dependencies.authenticate(request, config);
       if (request.method === "GET")

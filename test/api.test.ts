@@ -234,3 +234,79 @@ test("local server rejects DNS rebinding Host headers", () => {
   assert(!allowedLocalHost("localhost:9999", 5173));
   assert(!allowedLocalHost(undefined, 5173));
 });
+const demoCloud = { ...cloud, demoAiEnabled: true };
+test("demo endpoint stays closed until the operator enables it", async () => {
+  let touched = false;
+  const h = createHandler({
+    authenticate: async () => {
+      touched = true;
+      return {} as AuthContext;
+    },
+    claimDemoQuota: async () => {
+      touched = true;
+      return 0;
+    },
+    generateAI: async () => {
+      touched = true;
+      throw Error();
+    },
+  });
+  const r = await h(req("/api/demo-ai"), cloud);
+  assert.equal(r.status, 403);
+  assert.equal((await r.json()).error.code, "demo_disabled");
+  assert.equal(touched, false);
+});
+test("demo requests need no sign-in, consume the shared budget and report what is left", async () => {
+  const order: string[] = [];
+  const h = createHandler({
+    authenticate: async () => {
+      assert.fail("the public demo must not require a Supabase session");
+    },
+    claimQuota: async () => {
+      assert.fail("the public demo must not spend a personal quota");
+    },
+    claimDemoQuota: async () => {
+      order.push("demo-quota");
+      return 7;
+    },
+    generateAI: async () => {
+      order.push("ai");
+      return { text: "Demo result", model: "test-model", source: "openai" };
+    },
+  });
+  const r = await h(req("/api/demo-ai"), demoCloud);
+  assert.equal(r.status, 200);
+  assert.deepEqual(order, ["demo-quota", "ai"]);
+  assert.equal((await r.json()).demoRemaining, 7);
+});
+test("an exhausted shared demo budget never reaches OpenAI", async () => {
+  const h = createHandler({
+    claimDemoQuota: async () => {
+      throw new HttpError(429, "demo_rate_limit", "Die Demo macht kurz Pause.");
+    },
+    generateAI: async () => {
+      assert.fail("must not run");
+    },
+  });
+  const r = await h(req("/api/demo-ai"), demoCloud);
+  assert.equal(r.status, 429);
+  assert.equal(r.headers.get("Retry-After"), "60");
+  assert.equal((await r.json()).error.code, "demo_rate_limit");
+});
+test("signed-in requests keep their own quota and never touch the demo budget", async () => {
+  const h = createHandler({
+    authenticate: async () => ({}) as AuthContext,
+    claimQuota: async () => {},
+    claimDemoQuota: async () => {
+      assert.fail("the personal endpoint must not drain the demo budget");
+    },
+    generateAI: async () => ({
+      text: "Live result",
+      model: "test-model",
+      source: "openai" as const,
+    }),
+  });
+  const r = await h(req("/api/ai"), demoCloud);
+  assert.equal(r.status, 200);
+  assert.equal((await r.json()).demoRemaining, undefined);
+});

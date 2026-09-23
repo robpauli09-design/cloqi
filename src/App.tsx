@@ -3,6 +3,10 @@ import type { ReactNode } from "react";
 import type { SetStateAction } from "react";
 import { useWorkspace } from "./backend/WorkspaceProvider";
 import { useBackend } from "./backend/BackendProvider";
+import { useAuth } from "./auth/AuthProvider";
+import { allowedPages, initialTasksFor, pagePath, resolvePage } from "./auth/users";
+import { RoleViews } from "./roles/RoleViews";
+import { DemoBudgetNotice } from './backend/DemoBudgetNotice';
 import type { WorkspaceState, AIResult } from "../shared/contracts";
 import {
   Home,
@@ -37,7 +41,7 @@ import {
   MapPin,
   Target,
 } from "lucide-react";
-import { initialTasks, processes, articles } from "./data";
+import { processes, articles } from "./data";
 import type { Page, Task } from "./data";
 import { ContentPages } from "./Pages";
 import { useWorkspaceTools } from "./useWorkspaceTools";
@@ -49,7 +53,7 @@ export const processIcons = {
   logistics: Truck,
   quality: ShieldCheck,
 };
-const nav = [
+const baseNav = [
   { id: "home", label: "Home", icon: Home },
   { id: "processes", label: "Prozesse", icon: Workflow },
   { id: "tasks", label: "Aufgaben", icon: ListTodo },
@@ -113,6 +117,17 @@ export function Modal({
   );
 }
 export default function App() {
+  const {user:currentUser,logout}=useAuth();
+  const user=currentUser!;
+  const nav = user.role==='employee' ? [
+    {id:'home' as Page,label:'Home',icon:Home},
+    {id:'tasks' as Page,label:'Meine Aufgaben',icon:ListTodo},
+    {id:'station' as Page,label:'Meine Station',icon:Factory},
+    {id:'knowledge' as Page,label:'Wissen',icon:BookOpen},
+    {id:'ai' as Page,label:'KLOQI AI',icon:Sparkles},
+  ] : baseNav;
+  const visibleProcesses=user.role==='management'?processes:processes.filter(p=>p.id==='packaging');
+  const visibleArticles=user.role==='management'?articles:articles.filter(a=>a.id!=='production');
   const { state, setState } = useWorkspace();
   const { session } = useBackend();
   const {
@@ -143,7 +158,7 @@ export default function App() {
     setNotifications = field("notifications"),
     setReducedMotion = field("reducedMotion"),
     setAnalysisResults = field("analysisResults");
-  const [page, setPage] = useState<Page>("home");
+  const [page, setPage] = useState<Page>(()=>resolvePage(user.role,window.location.pathname));
   const [selectedProcess, setSelectedProcess] = useState<string | null>(null);
   const [selectedArticle, setSelectedArticle] = useState<string | null>(null);
   const [taskDetail, setTaskDetail] = useState<Task | null>(null);
@@ -156,6 +171,10 @@ export default function App() {
   const [help, setHelp] = useState(false);
   const [site, setSite] = useState("Tulln");
   const [period, setPeriod] = useState("Diese Woche");
+  useEffect(()=>{
+    const syncRoute=()=>{const next=resolvePage(user.role,window.location.pathname);const canonical=pagePath(user.role,next);if(window.location.pathname!==canonical)window.history.replaceState(null,'',canonical);setPage(next);setPopover('');setMobileMenu(false);setTaskDetail(null);};
+    syncRoute();window.addEventListener('popstate',syncRoute);return()=>window.removeEventListener('popstate',syncRoute);
+  },[user.role]);
   useEffect(() => {
     if (!toast) return;
     const id = setTimeout(() => setToast(""), 4500);
@@ -186,7 +205,9 @@ export default function App() {
   const done = tasks.filter((t) => t.done).length;
   const progress = Math.min(100, 78 + done * 3 + (mission === 3 ? 5 : 0));
   const go = (next: Page) => {
-    setPage(next);
+    const permitted=allowedPages(user.role).includes(next)?next:'home';
+    setPage(permitted);
+    const path=pagePath(user.role,permitted);if(window.location.pathname!==path)window.history.pushState(null,'',path);
     setSelectedProcess(null);
     setSelectedArticle(null);
     setPopover("");
@@ -195,7 +216,8 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "instant" });
   };
   const openProcess = (id: string) => {
-    go("processes");
+    if(user.role!=='management'&&id!=='packaging')return;
+    go(user.role==='employee'?"station":"processes");
     setSelectedProcess(id);
   };
   const completeTask = (id: string) => {
@@ -257,7 +279,7 @@ export default function App() {
   };
   const startMission = () => openProcess("packaging");
   const reset = () => {
-    setTasks(initialTasks);
+    setTasks(initialTasksFor(user));
     setMission(0);
     setAnalyzed([]);
     setAnalysisResults({});
@@ -270,7 +292,7 @@ export default function App() {
     setToast("Die Demo wurde zurückgesetzt.");
     go("home");
   };
-  useWorkspaceTools({ page, tasks, mission, openProcess });
+  useWorkspaceTools({ page, tasks, mission, openProcess, allowedProcessIds:visibleProcesses.map(p=>p.id) });
   const xp =
     480 +
     tasks.filter((t) => t.done && t.id !== "improve-packaging").length * 30 +
@@ -408,7 +430,7 @@ export default function App() {
           <div className="company-wrap">
             <button
               className="company-select"
-              onClick={() => setPopover(popover === "company" ? "" : "company")}
+              onClick={() => user.role==='management'?setPopover(popover === "company" ? "" : "company"):go('home')}
               aria-expanded={popover === "company"}
             >
               <span className="company-mark">
@@ -418,7 +440,7 @@ export default function App() {
                 <strong>Wiener Zucker</strong>
                 <small>
                   <MapPin size={11} />
-                  {site}, Österreich
+                  {user.role==='management'?`${site}, Österreich`:`Verpackung${user.line?' · Linie 3':''}`}
                 </small>
               </span>
               <ChevronDown size={16} />
@@ -458,7 +480,7 @@ export default function App() {
             {search && (
               <div className="popover search-results">
                 <strong>Suchergebnisse</strong>
-                {processes
+                {visibleProcesses
                   .filter((p) =>
                     (p.name + p.title)
                       .toLowerCase()
@@ -487,7 +509,7 @@ export default function App() {
                       {t.title}
                     </button>
                   ))}
-                {articles
+                {visibleArticles
                   .filter((a) =>
                     a.title.toLowerCase().includes(search.toLowerCase()),
                   )
@@ -504,9 +526,9 @@ export default function App() {
                     </button>
                   ))}
                 {![
-                  ...processes.map((p) => p.name + p.title),
+                  ...visibleProcesses.map((p) => p.name + p.title),
                   ...tasks.map((t) => t.title),
-                  ...articles.map((a) => a.title),
+                  ...visibleArticles.map((a) => a.title),
                 ].some((x) =>
                   x.toLowerCase().includes(search.toLowerCase()),
                 ) && <p>Keine Ergebnisse für „{search}“.</p>}
@@ -515,7 +537,7 @@ export default function App() {
           </div>
           <div className="top-actions">
             <button className="demo-badge" onClick={() => go("settings")}>
-              {session ? "Cloud-Workspace" : "Demo · Backend einrichten"}
+              {session ? "Cloud-Workspace" : "Prototyp · Beispieldaten"}
             </button>
             <div className="notification-wrap">
               <button
@@ -556,42 +578,39 @@ export default function App() {
             <span className="top-divider" />
             <button
               className="profile"
+              aria-label={`Profil von ${user.name}`}
               onClick={() => setPopover(popover === "profile" ? "" : "profile")}
             >
-              <span className="avatar peach">JS</span>
+              <span className="avatar peach">{user.initials}</span>
               <span>
-                <strong>Julia Sommer</strong>
-                <small>Produktionsleitung</small>
+                <strong>{user.name}</strong>
+                <small>{user.position}</small>
               </span>
               <ChevronDown size={14} />
             </button>
             {popover === "profile" && (
               <div className="popover profile-pop">
-                <strong>Hallo, Julia!</strong>
-                <p>Produktionsleitung · Wiener Zucker</p>
+                <strong>Hallo, {user.name.split(' ')[0]}!</strong>
+                <p>{user.position} · Wiener Zucker</p>
+                <button onClick={()=>go('settings')}><Users size={16}/>Profil</button>
                 <button onClick={() => go("settings")}>
                   <Settings size={16} />
-                  Profil & Einstellungen
+                  Einstellungen
                 </button>
                 <button
-                  onClick={() => {
-                    setPopover("");
-                    setToast(
-                      session
-                        ? "Dein persönlicher Workspace wird in Supabase gespeichert. Fabrik und Kennzahlen bleiben Beispieldaten."
-                        : "Du verwendest einen lokalen Demo-Workspace ohne Anmeldung.",
-                    );
-                  }}
+                  onClick={logout}
                 >
                   <LogOut size={16} />
-                  Über die Demo
+                  Abmelden
                 </button>
               </div>
             )}
           </div>
         </header>
         <main id="main-content">
-          {page === "home" ? (
+          {page==='ai'&&<DemoBudgetNotice/>}
+          <nav className="role-breadcrumbs" aria-label="Brotkrumennavigation"><button onClick={()=>go('home')}>Wiener Zucker</button>{user.department&&<><ChevronRight size={13}/><button onClick={()=>go('home')}>{user.department}</button></>}{user.line&&<><ChevronRight size={13}/><button onClick={()=>go('station')}>{user.line}</button></>}</nav>
+          {user.role!=='management'&&page!=='settings'?<RoleViews user={user} page={page} tasks={tasks} go={go} toggleTask={id=>setTasks(previous=>previous.map(task=>task.id===id?{...task,done:!task.done}:task))}/>:page === "home" ? (
             <>
               <div className="greeting">
                 <div>
@@ -898,7 +917,7 @@ export default function App() {
       </div>
       <nav className="bottom-nav">
         {nav
-          .filter((n) => ["home", "processes", "tasks", "ai"].includes(n.id))
+          .filter((n) => ["home", "processes", "station", "tasks", "ai"].includes(n.id))
           .map((n) => (
             <button
               key={n.id}

@@ -10,6 +10,7 @@ import type { Session } from "@supabase/supabase-js";
 import type { BackendStatus } from "../../shared/contracts";
 import { getBackendStatus } from "../services/api";
 import { supabase } from "./client";
+import { useAuth } from "../auth/AuthProvider";
 
 interface BackendContextValue {
   status: BackendStatus | null;
@@ -21,6 +22,7 @@ interface BackendContextValue {
 }
 const BackendContext = createContext<BackendContextValue | null>(null);
 export function BackendProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
   const [status, setStatus] = useState<BackendStatus | null>(null);
   const [error, setError] = useState("");
   const [session, setSession] = useState<Session | null>(null);
@@ -47,7 +49,7 @@ export function BackendProvider({ children }: { children: ReactNode }) {
     });
     return () => subscription.unsubscribe();
   }, []);
-  const aiMode = !status
+  const aiMode = user ? (status?.demoAiEnabled ? "live" : "demo") : !status
     ? "unavailable"
     : !status.aiConfigured
       ? "demo"
@@ -58,7 +60,7 @@ export function BackendProvider({ children }: { children: ReactNode }) {
           : "live";
   return (
     <BackendContext.Provider
-      value={{ status, session, authLoading, aiMode, error, refresh }}
+      value={{ status, session:user?null:session, authLoading:user?false:authLoading, aiMode, error, refresh }}
     >
       {children}
     </BackendContext.Provider>

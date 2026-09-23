@@ -1,4 +1,6 @@
 import { supabase } from "../backend/client";
+import {restoreDemo} from '../auth/users';
+import {demoBudget,demoDailyLimit,refundDemoRequest,reserveDemoRequest,saveDemoBudget} from './demoBudget';
 import {
   aiRequestSchema,
   aiResultSchema,
@@ -66,13 +68,24 @@ export async function getBackendStatus(): Promise<BackendStatus> {
   return request("status");
 }
 export async function requestAI(input: unknown, signal?: AbortSignal) {
-  return aiResultSchema.parse(
-    await request("ai", {
+  let demo = false;
+  try { demo = Boolean(restoreDemo(localStorage.getItem('kloqi_user'))); } catch { /* no persisted session */ }
+  const parsed = aiRequestSchema.parse(input);
+  if(demo&&!reserveDemoRequest())throw new ApiError(429,'demo_browser_limit',`Deine ${demoDailyLimit} Demo-Anfragen für heute sind aufgebraucht. Morgen (UTC) geht es weiter.`);
+  let body: unknown;
+  try {
+    body = await request(demo?"demo-ai":"ai", {
       method: "POST",
-      body: JSON.stringify(aiRequestSchema.parse(input)),
+      body: JSON.stringify(parsed),
       signal,
-    }),
-  );
+    });
+  } catch (error) {
+    if(demo)refundDemoRequest();
+    throw error;
+  }
+  const result = aiResultSchema.parse(body);
+  if(demo)saveDemoBudget({...demoBudget(),globalRemaining:result.demoRemaining});
+  return result;
 }
 function workspaceRecord(body: WorkspaceRecord): WorkspaceRecord {
   return { ...body, state: parseWorkspace(body.state) };

@@ -1,5 +1,6 @@
 export type Page =
   | "home"
+  | "station"
   | "processes"
   | "tasks"
   | "analytics"

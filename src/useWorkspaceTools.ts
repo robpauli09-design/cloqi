@@ -8,6 +8,7 @@ interface Workspace {
   tasks: Task[];
   mission: number;
   openProcess: (id: string) => void;
+  allowedProcessIds: string[];
 }
 interface ModelTool {
   name: string;
@@ -75,7 +76,7 @@ export function useWorkspaceTools(workspace: Workspace) {
       inputSchema: {
         type: "object",
         properties: {
-          processId: { type: "string", enum: processes.map((p) => p.id) },
+          processId: { type: "string", enum: current.current.allowedProcessIds },
         },
         required: ["processId"],
         additionalProperties: false,
@@ -90,7 +91,7 @@ export function useWorkspaceTools(workspace: Workspace) {
         )
           throw new Error("Erwartet wird ausschließlich processId.");
         const id = (input as { processId?: unknown }).processId;
-        if (typeof id !== "string" || !processes.some((p) => p.id === id))
+        if (typeof id !== "string" || !processes.some((p) => p.id === id) || !current.current.allowedProcessIds.includes(id))
           throw new Error("Unbekannter Beispielprozess.");
         flushSync(() => current.current.openProcess(id));
         return { page: "processes", processId: id };

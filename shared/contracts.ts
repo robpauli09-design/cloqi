@@ -34,6 +34,7 @@ export const aiResultSchema = z
     source: z.literal("openai"),
     model: z.string().min(1).max(200),
     analysis: analysisSchema.optional(),
+    demoRemaining: z.number().int().nonnegative().optional(),
   })
   .strict();
 export type AIResult = z.infer<typeof aiResultSchema>;
@@ -111,6 +112,7 @@ export const aiRequestSchema = z.discriminatedUnion("action", [
 ]);
 export type AIRequest = z.infer<typeof aiRequestSchema>;
 export interface BackendStatus {
+  demoAiEnabled: boolean;
   aiConfigured: boolean;
   authConfigured: boolean;
   authRequired: boolean;

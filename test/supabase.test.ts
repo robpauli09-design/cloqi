@@ -71,14 +71,17 @@ before(async () => {
   for (const id of [owner, stranger, member, quotaUser]) {
     await db.query("insert into auth.users(id) values ($1)", [id]);
   }
-  const migration = await readFile(
-    new URL(
-      "../supabase/migrations/202609220001_kloqi_backend.sql",
-      import.meta.url,
-    ),
-    "utf8",
-  );
-  await db.exec(migration);
+  for (const file of [
+    "202609220001_kloqi_backend.sql",
+    "202609230001_demo_ai_quota.sql",
+  ]) {
+    await db.exec(
+      await readFile(
+        new URL(`../supabase/migrations/${file}`, import.meta.url),
+        "utf8",
+      ),
+    );
+  }
   workspaceId = (await ensure(owner)).workspace_id;
 });
 
@@ -374,3 +377,72 @@ describe(
     });
   },
 );
+
+async function claimDemo(role: "anon" | "authenticated" = "anon") {
+  return asUser(
+    null,
+    async (tx) => {
+      const result = await tx.query<{ remaining: number }>(
+        "select public.claim_demo_ai_quota() as remaining",
+      );
+      return result.rows[0].remaining;
+    },
+    role,
+  );
+}
+const rateLimited = (error: unknown) =>
+  error instanceof Error && error.message.includes("demo_rate_limit");
+
+describe("shared public demo budget", { concurrency: false }, () => {
+  it("pools every visitor into one budget and stops at three per minute", async () => {
+    await db.exec("delete from kloqi_private.demo_ai_budget");
+    assert.deepEqual(
+      [await claimDemo(), await claimDemo("authenticated"), await claimDemo()],
+      [49, 48, 47],
+    );
+    await assert.rejects(claimDemo(), rateLimited);
+    const counter = await db.query<{ minute_count: number }>(
+      "select minute_count from kloqi_private.demo_ai_budget",
+    );
+    assert.equal(counter.rows[0].minute_count, 3);
+  });
+
+  it("caps the whole demo at fifty per UTC day even while minutes are free", async () => {
+    const freeMinute = `update kloqi_private.demo_ai_budget
+      set minute_bucket = now() - interval '1 hour', minute_count = 3`;
+    await db.query(
+      "update kloqi_private.demo_ai_budget set day_count = 49, minute_bucket = now() - interval '1 hour', minute_count = 3",
+    );
+    assert.equal(await claimDemo(), 0);
+    await db.query(freeMinute);
+    await assert.rejects(claimDemo(), rateLimited);
+    const counter = await db.query<{ day_count: number }>(
+      "select day_count from kloqi_private.demo_ai_budget",
+    );
+    assert.equal(counter.rows[0].day_count, 50);
+  });
+
+  it("replenishes only after the UTC day rolls over", async () => {
+    await db.query(
+      "update kloqi_private.demo_ai_budget set day_bucket = day_bucket - interval '1 day', minute_bucket = now() - interval '1 hour'",
+    );
+    assert.equal(await claimDemo(), 49);
+  });
+
+  it("lets anonymous visitors consume but never read or reset the counter", async () => {
+    for (const sql of [
+      "select * from kloqi_private.demo_ai_budget",
+      "update kloqi_private.demo_ai_budget set day_count = 0",
+      "delete from kloqi_private.demo_ai_budget",
+    ]) {
+      await assert.rejects(
+        asUser(null, (tx) => tx.exec(sql), "anon"),
+        { code: "42501" },
+      );
+    }
+    const counter = await db.query<{ day_count: number }>(
+      "select day_count from kloqi_private.demo_ai_budget",
+    );
+    assert.equal(counter.rows[0].day_count, 1);
+  });
+});
