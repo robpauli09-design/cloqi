@@ -6,6 +6,7 @@ import { useBackend } from "./backend/BackendProvider";
 import { useAuth } from "./auth/AuthProvider";
 import { allowedPages, initialTasksFor, pagePath, resolvePage } from "./auth/users";
 import { RoleViews } from "./roles/RoleViews";
+import {ImportFlow,ImportLibrary} from './imports/ImportFlow';
 import { DemoBudgetNotice } from './backend/DemoBudgetNotice';
 import type { WorkspaceState, AIResult } from "../shared/contracts";
 import {
@@ -40,6 +41,7 @@ import {
   LogOut,
   MapPin,
   Target,
+  Upload,
 } from "lucide-react";
 import { processes, articles } from "./data";
 import type { Page, Task } from "./data";
@@ -56,6 +58,7 @@ export const processIcons = {
 const baseNav = [
   { id: "home", label: "Home", icon: Home },
   { id: "processes", label: "Prozesse", icon: Workflow },
+  { id: "import", label: "Daten importieren", icon: Upload },
   { id: "tasks", label: "Aufgaben", icon: ListTodo },
   { id: "analytics", label: "Analysen", icon: ChartNoAxesCombined },
   { id: "team", label: "Team", icon: Users },
@@ -610,7 +613,8 @@ export default function App() {
         <main id="main-content">
           {page==='ai'&&<DemoBudgetNotice/>}
           <nav className="role-breadcrumbs" aria-label="Brotkrumennavigation"><button onClick={()=>go('home')}>Wiener Zucker</button>{user.department&&<><ChevronRight size={13}/><button onClick={()=>go('home')}>{user.department}</button></>}{user.line&&<><ChevronRight size={13}/><button onClick={()=>go('station')}>{user.line}</button></>}</nav>
-          {user.role!=='management'&&page!=='settings'?<RoleViews user={user} page={page} tasks={tasks} go={go} toggleTask={id=>setTasks(previous=>previous.map(task=>task.id===id?{...task,done:!task.done}:task))}/>:page === "home" ? (
+          {user.role!=='employee'&&(page==='processes'||page==='knowledge')&&<ImportLibrary user={user} onStart={()=>go('import')} knowledgeOnly={page==='knowledge'}/>}
+          {page==='import'?<ImportFlow user={user} onDone={()=>go('processes')}/>:user.role!=='management'&&page!=='settings'?<RoleViews user={user} page={page} tasks={tasks} go={go} toggleTask={id=>setTasks(previous=>previous.map(task=>task.id===id?{...task,done:!task.done}:task))}/>:page === "home" ? (
             <>
               <div className="greeting">
                 <div>

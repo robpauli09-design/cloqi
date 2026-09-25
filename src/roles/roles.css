@@ -582,7 +582,7 @@
 }
 .role-kpi-pair {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   margin: 22px 0;
 }
@@ -1018,6 +1018,7 @@
 .station-card h2 {
   font-size: 18px;
   margin: 0;
+  max-width: 100%;
 }
 .station-card > strong {
   font-size: 26px;
@@ -1478,7 +1479,7 @@
     font-size: 28px;
   }
   .role-analytics-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .login-story {
     padding: 35px;
@@ -1504,7 +1505,7 @@
   }
   .role-side-stack {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .role-home-grid .role-side-stack > .role-ai-card {
     min-height: 225px;
@@ -1530,7 +1531,7 @@
     font-size: 9px;
   }
   .role-task-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .role-task-layout .daily-progress {
     max-width: none;
@@ -1633,11 +1634,15 @@
   }
   .role-chain {
     padding: 12px 10px;
-    gap: 8px;
-    grid-template-columns: repeat(6, 75px);
+    gap: 8px 14px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
   }
   .role-chain button > svg {
     right: -13px;
+  }
+  .role-chain button:nth-child(3n) > svg {
+    display: none;
   }
   .station-legend {
     gap: 9px;
@@ -1765,7 +1770,7 @@
     font-size: 17px;
   }
   .role-team-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .role-chart {
     gap: 8px;

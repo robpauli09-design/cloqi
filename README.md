@@ -2,15 +2,18 @@
 
 Deutschsprachige Anwendung für Prozessverbesserungen mit React, TypeScript und Vite. Das Backend verbindet OpenAI für KI-Antworten und Supabase für Anmeldung und gespeicherte Arbeitsbereiche. Vercel kann Oberfläche und API gemeinsam aus diesem Repository bereitstellen.
 
-**Stand:** Die Anbindung ist im Code vorbereitet. Ein Supabase-Projekt, Produktionsvariablen und ein Vercel-Deployment müssen noch eingerichtet werden. Die vollständige Cloud-Verbindung ist erst danach prüfbar.
+**Aktueller Prototyp:** Ein gemeinsamer Benutzername-/Passwort-Login öffnet automatisch Management, Abteilungsleitung oder Mitarbeiteransicht. JuliaSommer, SarahBerger und LukasHuber verwenden jeweils `123456`. Diese öffentlichen Demo-Zugänge speichern Aufgaben lokal; sie sind keine produktive Authentifizierung. Das Backend ist vorbereitet, Supabase-Projekt und Vercel-Projekt wurden angelegt. Echte Demo-KI benötigt den serverseitigen OpenAI-Schlüssel, `DEMO_AI_ENABLED=true` und die Demo-Kontingent-Migration. Die weiter unten beschriebene Supabase-Anmeldung ist die Grundlage für eine spätere produktive Anmeldung, nicht ein zweiter Login in der aktuellen Oberfläche.
+
+**Datenimport:** Unter „Daten importieren“ können Management und Abteilungsleitung CSV, XLSX, JSON, PDF, DOCX und TXT einlesen, Zuordnungen prüfen und Prozessdaten übernehmen. Verarbeitung und Speicherung erfolgen lokal im Browser. Details, Grenzen und Datenschutz: [Lokaler Import-Flow](IMPORTS.md).
 
 ## Echte Funktionen und Beispieldaten
 
 | Bereich | Verhalten |
 | --- | --- |
 | Assistent, Prozessanalyse, Artikelzusammenfassung | Mit konfiguriertem Schlüssel echte OpenAI-Anfragen über den Server. Ohne Schlüssel ausdrücklich gekennzeichnete Demo-Antworten. Ein Fehler bei einem echten Aufruf wird angezeigt und nicht durch eine Demo-Antwort verdeckt. |
-| Anmeldung | Supabase Auth, sobald Projekt-URL und Publishable Key gesetzt sind. |
-| Aufgaben, Missionsfortschritt, Feedback, Einstellungen, KI-Prozessanalysen | Angemeldet in Supabase gespeichert; ohne Supabase lokal im Browser. |
+| Anmeldung | Drei lokale Prototyp-Konten mit automatischer Rollenansicht; keine manuelle Rollenauswahl. |
+| Aufgaben, Missionsfortschritt, Feedback, Einstellungen, KI-Prozessanalysen | Bei den Prototyp-Konten getrennt im Browser; Supabase-Arbeitsbereiche sind im Backend für echte Auth-Sitzungen vorbereitet. |
+| Unternehmensdaten-Import | Lokale Dateiverarbeitung und bestätigte Speicherung in IndexedDB; kein automatischer Versand an Cloud oder KI. |
 | Fabrikbild, Prozesse, Kennzahlen, Diagramme, Team und Wissensartikel | Statische Beispieldaten, keine Maschinen-, ERP- oder MES-Anbindung. |
 | Einsparungen und Fabrikverbesserungen | Illustrative Simulation; erledigte Aufgaben erzeugen keine gemessenen Produktionswerte. |
 

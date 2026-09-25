@@ -24,6 +24,7 @@
 }
 body {
   margin: 0;
+  overflow-wrap: break-word;
 }
 button,
 input,
@@ -115,6 +116,13 @@ strong {
   display: flex;
   flex-direction: column;
   z-index: 20;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.sidebar > * {
+  min-width: 0;
+  flex-shrink: 0;
 }
 .brand {
   text-align: left;
@@ -151,7 +159,20 @@ strong {
 }
 .sidebar nav {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 7px;
+}
+.sidebar .nav-item {
+  min-width: 0;
+  white-space: normal;
+}
+.sidebar .nav-item > span:not(.ai-tag) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.sidebar .nav-item b,
+.sidebar .ai-tag {
+  flex-shrink: 0;
 }
 .nav-item {
   display: flex;
@@ -1405,6 +1426,12 @@ strong {
     width: 190px;
     padding-inline: 13px;
   }
+  .sidebar .brand {
+    margin-inline: 4px;
+  }
+  .sidebar .wordmark {
+    font-size: 36px;
+  }
   .workspace {
     margin-left: 190px;
   }
@@ -1558,7 +1585,7 @@ strong {
     margin: 5px 0 37px;
     text-align: center;
   }
-  .wordmark {
+  .sidebar .wordmark {
     font-size: 0;
     letter-spacing: 0;
   }
@@ -1647,7 +1674,7 @@ strong {
 }
 @media (max-width: 800px) {
   .home-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .factory-stage {
     min-height: 390px;
@@ -1657,7 +1684,7 @@ strong {
     width: 110%;
   }
   .dashboard-rail {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: auto;
   }
   .ask-card {
@@ -1914,7 +1941,7 @@ strong {
     font-size: 9px;
   }
   .dashboard-rail {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
   .progress-card {
@@ -1922,12 +1949,12 @@ strong {
   }
   .progress-body {
     justify-content: center;
-    gap: 44px;
+    gap: clamp(16px, 8vw, 44px);
     padding: 21px 0;
   }
   .progress-ring {
-    height: 135px;
-    width: 135px;
+    height: clamp(112px, 36vw, 135px);
+    width: clamp(112px, 36vw, 135px);
     padding: 11px;
   }
   .progress-ring strong {
@@ -2320,6 +2347,12 @@ strong {
   gap: 8px;
   color: #8d967f;
   font-size: 12px;
+}
+.metric > div > span {
+  min-width: 0;
+}
+.metric > div > svg {
+  flex-shrink: 0;
 }
 .metric > strong {
   display: block;
@@ -3436,15 +3469,15 @@ strong {
     margin-top: -8px;
   }
   .process-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .metric-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 13px;
   }
   .workflow-steps {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 15px;
   }
   .workflow-steps strong {
@@ -3454,7 +3487,7 @@ strong {
     display: none;
   }
   .finding-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 12px;
   }
   .mission-steps {
@@ -3495,10 +3528,10 @@ strong {
     min-width: 190px;
   }
   .analytics-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .analytics-insights {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .insight p {
     min-height: 0;
@@ -3507,7 +3540,7 @@ strong {
     display: block;
   }
   .ai-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .ai-context {
     display: none;
@@ -3573,7 +3606,7 @@ strong {
     white-space: nowrap;
   }
   .process-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .process-card {
     padding: 24px;
@@ -3643,7 +3676,7 @@ strong {
     display: none;
   }
   .workflow-steps {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 13px;
   }
   .workflow-steps button {
@@ -3744,7 +3777,7 @@ strong {
   .task-summary {
     gap: 14px;
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     padding-bottom: 22px;
   }
   .task-summary > div {
@@ -3876,7 +3909,7 @@ strong {
     margin-top: 4px;
   }
   .knowledge-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .knowledge-search {
     padding: 16px;
@@ -3987,7 +4020,7 @@ strong {
     padding: 22px;
   }
   .form-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .setting-row {
     gap: 10px;
@@ -4044,9 +4077,6 @@ strong {
   .modal .form-hint {
     font-size: 11px;
   }
-}
-.sidebar {
-  overflow-y: auto;
 }
 .factory-stage {
   height: 400px;
@@ -4436,5 +4466,20 @@ button.demo-badge {
   .workspace-sync {
     text-align: left;
     justify-content: flex-start;
+  }
+  /* A stray pixel of overflow must never let the whole page pan sideways. */
+  html,
+  body {
+    overflow-x: clip;
+  }
+  /* German compounds like "Verpackungsmaschine" outgrow narrow cards; only long words split. */
+  #main-content {
+    hyphens: auto;
+    -webkit-hyphens: auto;
+    hyphenate-limit-chars: 12 5 5;
+  }
+  #main-content :is(input, textarea) {
+    hyphens: manual;
+    -webkit-hyphens: manual;
   }
 }

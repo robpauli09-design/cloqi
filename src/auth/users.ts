@@ -75,6 +75,7 @@ export function allowedPages(role: Role): Page[] {
     : [
         "home",
         "processes",
+        "import",
         "tasks",
         "analytics",
         "team",

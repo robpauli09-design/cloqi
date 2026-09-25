@@ -13,5 +13,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["server", "shared", "api", "test", "src/data.ts"]
+  "include": ["server", "shared", "api", "test", "src/data.ts", "src/vite-env.d.ts"]
 }
