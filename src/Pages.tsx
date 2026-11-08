@@ -139,7 +139,7 @@ function AIConnectionNote({ go }: { go: (page: Page) => void }) {
       <CircleHelp size={18} />
       <p>
         {aiMode === "signin-required"
-          ? "Melde dich an, um KLOQI mit OpenAI zu nutzen."
+          ? "Melde dich an, um CLOQI mit OpenAI zu nutzen."
           : "Die KI-Verbindung ist noch nicht bereit. Prüfe die Einrichtung und den Verbindungsstatus in den Einstellungen."}
       </p>
       <button className="button secondary" onClick={() => go("settings")}>
@@ -274,7 +274,7 @@ function Processes({
           >
             <Sparkles size={17} />
             {analyzing
-              ? "KLOQI analysiert …"
+              ? "CLOQI analysiert …"
               : isAnalyzed
                 ? "Erneut analysieren"
                 : "Prozess analysieren"}
@@ -284,7 +284,7 @@ function Processes({
         {analysisError && <AIError message={analysisError} retry={analyze} />}
         {analyzing && (
           <p className="ai-source" role="status">
-            KLOQI analysiert den Beispielprozess …
+            CLOQI analysiert den Beispielprozess …
           </p>
         )}
         <div className="process-meta">
@@ -461,7 +461,7 @@ function Processes({
                 </button>
               )}
               <button className="button secondary" onClick={() => go("ai")}>
-                <MessageSquare size={17} /> Mit KLOQI besprechen
+                <MessageSquare size={17} /> Mit CLOQI besprechen
               </button>
             </div>
           </section>
@@ -472,7 +472,7 @@ function Processes({
                 <Sparkles size={24} />
               </IconBox>
               <div>
-                <span className="eyebrow">KLOQI HAT GENAUER HINGESCHAUT</span>
+                <span className="eyebrow">CLOQI HAT GENAUER HINGESCHAUT</span>
                 <h2>
                   {improved
                     ? "Dein besserer Ablauf ist bereit."
@@ -535,15 +535,15 @@ function Processes({
               </button>
               <button className="button secondary" onClick={() => go("ai")}>
                 <MessageSquare size={17} />
-                Mit KLOQI besprechen
+                Mit CLOQI besprechen
               </button>
             </div>
           </section>
         ) : (
           <section className="analysis-invitation">
             <img
-              src="/assets/kloqi-green.png"
-              alt="KLOQI schaut mit dir auf den Prozess"
+              src="/assets/cloqi-green.png"
+              alt="CLOQI schaut mit dir auf den Prozess"
             />
             <div>
               <span className="eyebrow">EIN FRISCHER BLICK HILFT</span>
@@ -1383,10 +1383,10 @@ function Knowledge({
             >
               <Sparkles size={17} />
               {summarizing
-                ? "KLOQI fasst zusammen …"
+                ? "CLOQI fasst zusammen …"
                 : summary
                   ? "Zusammenfassung schließen"
-                  : "Von KLOQI zusammenfassen lassen"}
+                  : "Von CLOQI zusammenfassen lassen"}
             </button>
             <AIConnectionNote go={go} />
             {summaryError && (
@@ -1531,7 +1531,7 @@ function Assistant({
     <>
       <Heading
         eyebrow="DEIN DIGITALER PROZESSBEGLEITER"
-        title="Frag KLOQI."
+        title="Frag CLOQI."
         description="Zusammen wird aus einer Frage der nächste gute Schritt."
       />
       <AIConnectionNote go={go} />
@@ -1542,7 +1542,7 @@ function Assistant({
               <Sparkles size={19} />
             </span>
             <span>
-              <strong>KLOQI</strong>
+              <strong>CLOQI</strong>
               <small>Für dich und deinen Workflow da.</small>
             </span>
             <span className="demo-badge">
@@ -1556,7 +1556,7 @@ function Assistant({
           <div className="chat-messages" ref={listRef}>
             {messages.length === 0 ? (
               <div className="chat-welcome">
-                <img src="/assets/kloqi-green.png" alt="Hallo, ich bin KLOQI" />
+                <img src="/assets/cloqi-green.png" alt="Hallo, ich bin CLOQI" />
                 <h2>Hallo Julia. Was bewegt dich?</h2>
                 <p>
                   Ein Prozess hakt? Eine Frage ist offen?
@@ -1567,7 +1567,7 @@ function Assistant({
                   {[
                     "Warum dauert die Verpackung heute länger?",
                     "Welche Aufgaben sind heute wichtig?",
-                    "Wie starte ich mit KLOQI?",
+                    "Wie starte ich mit CLOQI?",
                   ].map((q) => (
                     <button onClick={() => send(q)} key={q}>
                       {q}
@@ -1585,7 +1585,7 @@ function Assistant({
                     {m.role === "user" ? "JS" : <Sparkles size={17} />}
                   </span>
                   <div>
-                    <strong>{m.role === "user" ? "Du" : "KLOQI"}</strong>
+                    <strong>{m.role === "user" ? "Du" : "CLOQI"}</strong>
                     <p className="ai-generated-text">{m.text}</p>
                     {m.source && (
                       <small className="ai-source">{m.source}</small>
@@ -1617,7 +1617,7 @@ function Assistant({
             {thinking && (
               <div className="thinking" role="status">
                 <Sparkles size={17} />
-                KLOQI schaut nach …
+                CLOQI schaut nach …
               </div>
             )}
             {chatError && failedMessages && (
@@ -1637,7 +1637,7 @@ function Assistant({
             }}
           >
             <input
-              aria-label="Nachricht an KLOQI"
+              aria-label="Nachricht an CLOQI"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Frag mich etwas zu deinen Prozessen …"
@@ -1735,7 +1735,7 @@ function SettingsPage({
   return (
     <>
       <Heading
-        eyebrow="DEIN KLOQI"
+        eyebrow="DEIN CLOQI"
         title="So passt es zu dir."
         description="Ein guter Workspace fühlt sich richtig an."
       />
@@ -1839,12 +1839,12 @@ function SettingsPage({
               className="text-action"
               onClick={() =>
                 toast(
-                  "KLOQI · React, TypeScript, OpenAI und Supabase · Produktionsdaten sind Beispiele.",
+                  "CLOQI · React, TypeScript, OpenAI und Supabase · Produktionsdaten sind Beispiele.",
                 )
               }
             >
               <CircleHelp size={16} />
-              Über KLOQI
+              Über CLOQI
             </button>
           </div>
         </section>

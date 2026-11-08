@@ -81,7 +81,7 @@ function databaseError(error: { code?: string; message?: string }): never {
   throw new HttpError(
     503,
     "database_unavailable",
-    "Die Datenbank ist nicht erreichbar oder die KLOQI-Migration wurde noch nicht ausgeführt.",
+    "Die Datenbank ist nicht erreichbar oder die CLOQI-Migration wurde noch nicht ausgeführt.",
   );
 }
 export async function loadWorkspace(

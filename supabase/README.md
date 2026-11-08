@@ -1,10 +1,14 @@
-# KLOQI Supabase database
+# CLOQI Supabase database
 
-Create a Supabase project, then run the complete contents of
-`migrations/202609220001_kloqi_backend.sql` in its SQL Editor as the database
-owner. Apply this migration once. Alternatively use the Supabase CLI migration
-workflow after linking your project. Keep `kloqi_private` out of the API's
-**Exposed schemas** setting.
+Create a Supabase project, then run the complete contents of each file in
+`migrations/` in its SQL Editor as the database owner, once each and in
+filename order (`202609220001_kloqi_backend.sql`,
+`202609230001_demo_ai_quota.sql`, `202611080001_cloqi_rename.sql`). An
+existing database only needs the files it has not run yet. Alternatively use
+the Supabase CLI migration workflow after linking your project. Keep
+`cloqi_private` out of the API's **Exposed schemas** setting. The first two
+files still create it as `kloqi_private`; the rename migration moves it to
+`cloqi_private`.
 
 The application uses the publishable key plus the signed-in user's JWT.
 It does **not** need a service-role key. Configure Supabase Auth's Site URL

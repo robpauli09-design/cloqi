@@ -1,4 +1,4 @@
-const key = 'kloqi-ai-demo-budget-v1';
+const key = 'cloqi-ai-demo-budget-v1';
 export const demoDailyLimit = 10;
 export function demoBudget() {
   const day = new Date().toISOString().slice(0, 10);
@@ -9,7 +9,7 @@ export function demoBudget() {
 }
 export function saveDemoBudget(value:ReturnType<typeof demoBudget>) {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Server quota remains authoritative. */ }
-  window.dispatchEvent(new Event('kloqi-demo-budget'));
+  window.dispatchEvent(new Event('cloqi-demo-budget'));
 }
 export function reserveDemoRequest() {
   const budget = demoBudget();

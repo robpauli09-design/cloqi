@@ -265,7 +265,7 @@ export const articles = [
   },
   {
     id: "software",
-    title: "Deine ersten Schritte mit KLOQI",
+    title: "Deine ersten Schritte mit CLOQI",
     category: "Allgemein",
     time: "2 Min.",
     intro: "Weniger Suchen. Mehr gemeinsam bewegen.",
@@ -273,7 +273,7 @@ export const articles = [
       "Die Startseite zeigt dir deine Unternehmenswelt und aktuelle Aufgaben.",
       "Öffne eine Prozesskarte, um den Ablauf besser zu verstehen.",
       "Unter Aufgaben kannst du Verbesserungen verfolgen und abschließen.",
-      "Frag KLOQI bietet in dieser Demo vorbereitete Antworten zu unseren Beispielprozessen.",
+      "Frag CLOQI bietet in dieser Demo vorbereitete Antworten zu unseren Beispielprozessen.",
     ],
     summary:
       "Mit der Fabrikwelt starten, Prozesse entdecken und Verbesserungen als Aufgaben festhalten.",

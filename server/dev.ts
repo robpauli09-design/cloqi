@@ -140,7 +140,7 @@ export async function startDevServer(port = 5173) {
     await vite.close();
     throw error;
   }
-  console.info(`KLOQI läuft unter http://127.0.0.1:${port}/`);
+  console.info(`CLOQI läuft unter http://127.0.0.1:${port}/`);
   const close = async () => {
     await vite.close();
     await new Promise<void>((resolve, reject) =>

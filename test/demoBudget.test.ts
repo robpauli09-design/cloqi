@@ -29,7 +29,7 @@ function inBrowser<T>(run: () => T): T {
     delete globals.Event;
   }
 }
-const key = "kloqi-ai-demo-budget-v1";
+const key = "cloqi-ai-demo-budget-v1";
 
 test("a browser gets ten tries per UTC day and is refused afterwards", () => {
   store.clear();

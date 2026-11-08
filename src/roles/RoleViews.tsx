@@ -127,7 +127,7 @@ export function roleAnswer(question: string) {
     return "Stelle gemäß der gültigen Betriebsanweisung einen sicheren Zustand her und informiere Sarah Berger. Dokumentiere die angezeigte Meldung und den Zeitpunkt. Greife nicht in laufende Anlagen ein und überbrücke keine Schutzeinrichtungen. Die weitere Prüfung übernimmt die zuständige Fachperson.";
   if (/einstell|maschine/.test(q))
     return "Für Linie 3 gilt das freigegebene Verpackungsprotokoll. Gleiche Produkt, Folientyp und die dokumentierten Einstellungen ab. Stimme Änderungen mit der Schichtleitung ab und dokumentiere den vorgesehenen Probelauf. Die Demo enthält keine verbindlichen Maschinenparameter.";
-  return "Für deinen Bereich Verpackung findest du Aufgaben, Stationsstatus und die passenden Dokumente in KLOQI. Beschreibe deine Beobachtung mit Linie, Zeitpunkt und angezeigter Meldung. So kann die Abteilungsleitung den nächsten Schritt gezielt mit dir abstimmen.";
+  return "Für deinen Bereich Verpackung findest du Aufgaben, Stationsstatus und die passenden Dokumente in CLOQI. Beschreibe deine Beobachtung mit Linie, Zeitpunkt und angezeigter Meldung. So kann die Abteilungsleitung den nächsten Schritt gezielt mit dir abstimmen.";
 }
 function Chain({
   active,
@@ -576,12 +576,12 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
                 </>
               )}
               <section className="role-ai-card">
-                <img src="/assets/kloqi-green.png" alt="KLOQI hilft dir" />
+                <img src="/assets/cloqi-green.png" alt="CLOQI hilft dir" />
                 <span className="eyebrow">DEIN PROZESSBEGLEITER</span>
-                <h2>Frag KLOQI.</h2>
+                <h2>Frag CLOQI.</h2>
                 <p>Ich bin hier, wenn du Fragen hast.</p>
                 <button className="button primary" onClick={() => go("ai")}>
-                  KLOQI fragen
+                  CLOQI fragen
                   <Sparkles size={17} />
                 </button>
               </section>
@@ -781,7 +781,7 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
               <IconBox tone="yellow">
                 <Sparkles size={24} />
               </IconBox>
-              <span className="eyebrow">KLOQI INSIGHT · DEMO</span>
+              <span className="eyebrow">CLOQI INSIGHT · DEMO</span>
               <h2>Ein genauer Blick auf die Palettierung lohnt sich.</h2>
               <p>
                 Die Palettierung läuft seit drei Schichten langsamer als üblich.
@@ -890,9 +890,9 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
             eyebrow={
               employee
                 ? "DEIN PERSÖNLICHER PROZESSBEGLEITER"
-                : "VERPACKUNG · KLOQI AI"
+                : "VERPACKUNG · CLOQI AI"
             }
-            title="Frag KLOQI."
+            title="Frag CLOQI."
             description="Ich bin hier, wenn du Fragen hast. Gemeinsam finden wir den nächsten Schritt."
           />
           <div className="role-chat-layout">
@@ -902,7 +902,7 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
                   <Sparkles size={22} />
                 </span>
                 <div>
-                  <strong>KLOQI</strong>
+                  <strong>CLOQI</strong>
                   <small>
                     Verpackung{employee ? " · Linie 3" : ""} ·{" "}
                     {aiMode === "live" ? "Echte KI" : "Demo-Assistent"}
@@ -914,8 +914,8 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
                 {messages.length === 0 ? (
                   <div className="role-chat-welcome">
                     <img
-                      src="/assets/kloqi-green.png"
-                      alt="KLOQI, dein Prozessbegleiter"
+                      src="/assets/cloqi-green.png"
+                      alt="CLOQI, dein Prozessbegleiter"
                     />
                     <h2>Hallo, {user.name.split(" ")[0]}!</h2>
                     <p>Was kann ich für dich tun?</p>
@@ -933,7 +933,7 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
                       key={index}
                     >
                       <strong>
-                        {message.role === "user" ? user.name : "KLOQI"}
+                        {message.role === "user" ? user.name : "CLOQI"}
                       </strong>
                       <p>{message.text}</p>
                       {message.role === "assistant" && (
@@ -944,7 +944,7 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
                     </div>
                   ))
                 )}
-                {busy&&<p role="status">KLOQI denkt nach …</p>}<div ref={chatEnd}/>
+                {busy&&<p role="status">CLOQI denkt nach …</p>}<div ref={chatEnd}/>
               </div>
               {chatError&&<p className="ai-error-message" role="alert">{chatError}</p>}
               <form
@@ -955,8 +955,8 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
                 }}
               >
                 <input
-                  aria-label="Frage an KLOQI"
-                  placeholder="Stelle KLOQI eine Frage …"
+                  aria-label="Frage an CLOQI"
+                  placeholder="Stelle CLOQI eine Frage …"
                   maxLength={4000}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -1038,7 +1038,7 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
           <div className="station-insight">
             <Sparkles size={22} />
             <div>
-              <strong>KLOQI Insight · Demo</strong>
+              <strong>CLOQI Insight · Demo</strong>
               <p>
                 {station.id === "pallet"
                   ? "Die Palettierung läuft seit drei Schichten langsamer als üblich."

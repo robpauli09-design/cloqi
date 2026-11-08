@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, UserRound } from "lucide-react";
 import { authenticateDemo, homePath, restoreDemo, users } from "./users";
 import type { DemoUser } from "./users";
-const key = "kloqi_user";
+const key = "cloqi_user";
 const AuthContext = createContext<{
   user: DemoUser | null;
   login: (username: string, password: string) => boolean;
@@ -83,7 +83,7 @@ function Login() {
     <main className="login-page">
       <section className="login-story">
         <div className="login-brand wordmark">
-          KLO<span>Q</span>i<span className="brand-dot">.</span>
+          CLO<span>Q</span>i<span className="brand-dot">.</span>
         </div>
         <div className="login-story-copy">
           <span className="eyebrow">GEMEINSAM IM FLOW</span>
@@ -102,7 +102,7 @@ function Login() {
         </div>
         <img
           src="/assets/factory.png"
-          alt="Isometrische KLOQI-Unternehmenswelt"
+          alt="Isometrische CLOQI-Unternehmenswelt"
         />
         <div className="login-story-footer">
           <span className="status-light" />
@@ -111,10 +111,10 @@ function Login() {
       </section>
       <section className="login-form-side">
         <div className="login-mobile-brand wordmark">
-          KLO<span>Q</span>i.
+          CLO<span>Q</span>i.
         </div>
         <div className="login-form-wrap">
-          <span className="eyebrow">WILLKOMMEN BEI KLOQI</span>
+          <span className="eyebrow">WILLKOMMEN BEI CLOQI</span>
           <h2>
             Turning work
             <br />
@@ -200,14 +200,14 @@ function Login() {
             </small>
           </details>
           <div className="login-companion">
-            <img src="/assets/kloqi-green.png" alt="KLOQI mit gelbem Helm" />
+            <img src="/assets/cloqi-green.png" alt="CLOQI mit gelbem Helm" />
             <p>
               <strong>Schön, dass du da bist.</strong>
               <span>Wir machen Arbeit ein bisschen einfacher.</span>
             </p>
           </div>
         </div>
-        <p className="login-footer">KLOQI · Turning work into workflow.</p>
+        <p className="login-footer">CLOQI · Turning work into workflow.</p>
       </section>
     </main>
   );

@@ -74,6 +74,7 @@ before(async () => {
   for (const file of [
     "202609220001_kloqi_backend.sql",
     "202609230001_demo_ai_quota.sql",
+    "202611080001_cloqi_rename.sql",
   ]) {
     await db.exec(
       await readFile(
@@ -93,6 +94,25 @@ describe(
   "Supabase workspace and quota isolation",
   { concurrency: false },
   () => {
+    it("names new workspaces after CLOQI", async () => {
+      const { rows } = await db.query<{ name: string }>(
+        "select name from public.workspaces where id = $1",
+        [workspaceId],
+      );
+      assert.equal(rows[0]?.name, "Mein CLOQI Workspace");
+    });
+
+    it("leaves no schema or function body pointing at the old KLOQI schema", async () => {
+      const schemas = await db.query(
+        "select 1 from pg_namespace where nspname = 'kloqi_private'",
+      );
+      assert.equal(schemas.rows.length, 0);
+      const stale = await db.query<{ proname: string }>(
+        "select proname from pg_proc where prosrc like '%kloqi_private%'",
+      );
+      assert.deepEqual(stale.rows, []);
+    });
+
     it("seeds exactly one workspace and preserves saved state on subsequent ensure calls", async () => {
       const again = await ensure(owner, { ...initial, mission: 3 });
       assert.equal(again.workspace_id, workspaceId);
@@ -323,9 +343,9 @@ describe(
 
     it("does not expose quota counters or allow clients to reset them", async () => {
       for (const sql of [
-        "select * from kloqi_private.ai_usage",
-        "update kloqi_private.ai_usage set minute_count = 0, day_count = 0",
-        "delete from kloqi_private.ai_usage",
+        "select * from cloqi_private.ai_usage",
+        "update cloqi_private.ai_usage set minute_count = 0, day_count = 0",
+        "delete from cloqi_private.ai_usage",
       ]) {
         await assert.rejects(
           asUser(quotaUser, (tx) => tx.exec(sql)),
@@ -339,7 +359,7 @@ describe(
       // use the authenticated role, real locks, and the deployed RPC itself.
       await db.query(
         `
-      update kloqi_private.ai_usage set minute_started = now() - interval '2 minutes',
+      update cloqi_private.ai_usage set minute_started = now() - interval '2 minutes',
         minute_count = 20, day_started = (now() at time zone 'UTC')::date, day_count = 199
       where user_id = $1`,
         [quotaUser],
@@ -355,7 +375,7 @@ describe(
       );
       await db.query(
         `
-      update kloqi_private.ai_usage set minute_started = now() - interval '1 day',
+      update cloqi_private.ai_usage set minute_started = now() - interval '1 day',
         minute_count = 20, day_started = (now() at time zone 'UTC')::date - 1, day_count = 200
       where user_id = $1`,
         [quotaUser],
@@ -370,7 +390,7 @@ describe(
         minute_count: number;
         day_count: number;
       }>(
-        "select minute_count, day_count from kloqi_private.ai_usage where user_id = $1",
+        "select minute_count, day_count from cloqi_private.ai_usage where user_id = $1",
         [quotaUser],
       );
       assert.deepEqual(counter.rows[0], { minute_count: 1, day_count: 1 });
@@ -395,45 +415,45 @@ const rateLimited = (error: unknown) =>
 
 describe("shared public demo budget", { concurrency: false }, () => {
   it("pools every visitor into one budget and stops at three per minute", async () => {
-    await db.exec("delete from kloqi_private.demo_ai_budget");
+    await db.exec("delete from cloqi_private.demo_ai_budget");
     assert.deepEqual(
       [await claimDemo(), await claimDemo("authenticated"), await claimDemo()],
       [49, 48, 47],
     );
     await assert.rejects(claimDemo(), rateLimited);
     const counter = await db.query<{ minute_count: number }>(
-      "select minute_count from kloqi_private.demo_ai_budget",
+      "select minute_count from cloqi_private.demo_ai_budget",
     );
     assert.equal(counter.rows[0].minute_count, 3);
   });
 
   it("caps the whole demo at fifty per UTC day even while minutes are free", async () => {
-    const freeMinute = `update kloqi_private.demo_ai_budget
+    const freeMinute = `update cloqi_private.demo_ai_budget
       set minute_bucket = now() - interval '1 hour', minute_count = 3`;
     await db.query(
-      "update kloqi_private.demo_ai_budget set day_count = 49, minute_bucket = now() - interval '1 hour', minute_count = 3",
+      "update cloqi_private.demo_ai_budget set day_count = 49, minute_bucket = now() - interval '1 hour', minute_count = 3",
     );
     assert.equal(await claimDemo(), 0);
     await db.query(freeMinute);
     await assert.rejects(claimDemo(), rateLimited);
     const counter = await db.query<{ day_count: number }>(
-      "select day_count from kloqi_private.demo_ai_budget",
+      "select day_count from cloqi_private.demo_ai_budget",
     );
     assert.equal(counter.rows[0].day_count, 50);
   });
 
   it("replenishes only after the UTC day rolls over", async () => {
     await db.query(
-      "update kloqi_private.demo_ai_budget set day_bucket = day_bucket - interval '1 day', minute_bucket = now() - interval '1 hour'",
+      "update cloqi_private.demo_ai_budget set day_bucket = day_bucket - interval '1 day', minute_bucket = now() - interval '1 hour'",
     );
     assert.equal(await claimDemo(), 49);
   });
 
   it("lets anonymous visitors consume but never read or reset the counter", async () => {
     for (const sql of [
-      "select * from kloqi_private.demo_ai_budget",
-      "update kloqi_private.demo_ai_budget set day_count = 0",
-      "delete from kloqi_private.demo_ai_budget",
+      "select * from cloqi_private.demo_ai_budget",
+      "update cloqi_private.demo_ai_budget set day_count = 0",
+      "delete from cloqi_private.demo_ai_budget",
     ]) {
       await assert.rejects(
         asUser(null, (tx) => tx.exec(sql), "anon"),
@@ -441,7 +461,7 @@ describe("shared public demo budget", { concurrency: false }, () => {
       );
     }
     const counter = await db.query<{ day_count: number }>(
-      "select day_count from kloqi_private.demo_ai_budget",
+      "select day_count from cloqi_private.demo_ai_budget",
     );
     assert.equal(counter.rows[0].day_count, 1);
   });

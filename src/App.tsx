@@ -63,7 +63,7 @@ const baseNav = [
   { id: "analytics", label: "Analysen", icon: ChartNoAxesCombined },
   { id: "team", label: "Team", icon: Users },
   { id: "knowledge", label: "Wissen", icon: BookOpen },
-  { id: "ai", label: "KLOQI AI", icon: Sparkles },
+  { id: "ai", label: "CLOQI AI", icon: Sparkles },
 ] as const;
 export function IconBox({
   children,
@@ -127,7 +127,7 @@ export default function App() {
     {id:'tasks' as Page,label:'Meine Aufgaben',icon:ListTodo},
     {id:'station' as Page,label:'Meine Station',icon:Factory},
     {id:'knowledge' as Page,label:'Wissen',icon:BookOpen},
-    {id:'ai' as Page,label:'KLOQI AI',icon:Sparkles},
+    {id:'ai' as Page,label:'CLOQI AI',icon:Sparkles},
   ] : baseNav;
   const visibleProcesses=user.role==='management'?processes:processes.filter(p=>p.id==='packaging');
   const visibleArticles=user.role==='management'?articles:articles.filter(a=>a.id!=='production');
@@ -364,10 +364,10 @@ export default function App() {
         <button
           className="brand"
           onClick={() => go("home")}
-          aria-label="KLOQI Startseite"
+          aria-label="CLOQI Startseite"
         >
           <span className="wordmark">
-            KLO<span>Q</span>i<span className="brand-dot">.</span>
+            CLO<span>Q</span>i<span className="brand-dot">.</span>
           </span>
           <small>Turning work into workflow.</small>
         </button>
@@ -390,8 +390,8 @@ export default function App() {
         <div className="sidebar-bottom">
           <div className="mascot-note">
             <img
-              src="/assets/kloqi-green.png"
-              alt="KLOQI, dein grüner Prozessbegleiter"
+              src="/assets/cloqi-green.png"
+              alt="CLOQI, dein grüner Prozessbegleiter"
             />
             <div className="little-spark">✦</div>
             <strong>
@@ -820,19 +820,19 @@ export default function App() {
                     )}
                   </section>
                   <section className="ask-card">
-                    <img src="/assets/kloqi-green.png" alt="KLOQI hilft dir" />
+                    <img src="/assets/cloqi-green.png" alt="CLOQI hilft dir" />
                     <div>
                       <span className="eyebrow">
                         <Sparkles size={13} /> DEIN PROZESSBEGLEITER
                       </span>
-                      <h2>Einfach KLOQI fragen.</h2>
+                      <h2>Einfach CLOQI fragen.</h2>
                       <p>
                         Eine Frage. Ein neuer Blick.
                         <br />
                         Dein nächster guter Schritt.
                       </p>
                       <button className="button dark" onClick={() => go("ai")}>
-                        Frag KLOQI
+                        Frag CLOQI
                         <ArrowUpRight size={16} />
                       </button>
                     </div>
@@ -958,8 +958,8 @@ export default function App() {
           <div className="task-detail">
             <img
               className="task-mascot"
-              src={`/assets/kloqi-${liveTask.priority === "Kritisch" ? "red" : liveTask.priority === "Hoch" || liveTask.priority === "Mittel" ? "yellow" : "green"}.png`}
-              alt={`KLOQI begleitet deine Aufgabe mit Priorität ${liveTask.priority}`}
+              src={`/assets/cloqi-${liveTask.priority === "Kritisch" ? "red" : liveTask.priority === "Hoch" || liveTask.priority === "Mittel" ? "yellow" : "green"}.png`}
+              alt={`CLOQI begleitet deine Aufgabe mit Priorität ${liveTask.priority}`}
             />
             <span
               className={`priority priority-${liveTask.priority.toLowerCase()}`}
@@ -1023,7 +1023,7 @@ export default function App() {
             <IconBox>
               <CircleHelp />
             </IconBox>
-            <h3>Willkommen in der KLOQI-Demo</h3>
+            <h3>Willkommen in der CLOQI-Demo</h3>
             <p>
               Entdecke die Fabrikwelt, analysiere einen Prozess oder schließe
               eine Aufgabe ab. Deine Änderungen bleiben lokal in diesem Browser
@@ -1041,7 +1041,7 @@ export default function App() {
                 go("knowledge");
               }}
             >
-              KLOQI kennenlernen
+              CLOQI kennenlernen
               <ArrowRight size={17} />
             </button>
           </div>

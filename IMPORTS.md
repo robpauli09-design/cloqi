@@ -26,7 +26,7 @@ Datumsfelder: ISO mit Offset wird nach UTC normalisiert. Ohne Offset wird UTC an
 
 ## Daten und Grenzen
 
-Die Verarbeitung geschieht im Browser. Keine Importdaten werden an OpenAI, Supabase oder andere Server übertragen. IndexedDB `kloqi-imports` speichert pro Prototyp-Benutzer. Browserdaten löschen entfernt die Importe; andere Geräte erhalten sie nicht. Die Quelldateien bleiben bis zur Bestätigung nur im Arbeitsspeicher. Nicht gespeicherte Entwürfe gehen beim Verlassen/Neuladen verloren.
+Die Verarbeitung geschieht im Browser. Keine Importdaten werden an OpenAI, Supabase oder andere Server übertragen. IndexedDB `cloqi-imports` speichert pro Prototyp-Benutzer. Browserdaten löschen entfernt die Importe; andere Geräte erhalten sie nicht. Die Quelldateien bleiben bis zur Bestätigung nur im Arbeitsspeicher. Nicht gespeicherte Entwürfe gehen beim Verlassen/Neuladen verloren.
 
 Optionale Pseudonymisierung ersetzt ausschließlich die zugeordnete Personen-/Rollenspalte durch importlokale IDs. Sie anonymisiert keine Dokumente, Vorgangs-IDs oder Freitexte.
 
@@ -39,7 +39,7 @@ Ein produktiver Local Data Gateway, OAuth-Connectoren, SQL-Abfragen, REST/OData-
 - `src/imports/model.ts`: gemeinsames Importmodell, Erkennung, Normalisierung und Kennzahlen.
 - `src/imports/parsers.ts`: dynamisch geladene Datei-Parser; Tabellen und Dokumente werden unterschiedlich eingelesen und danach einheitlich übergeben.
 - `src/imports/store.ts`: explizite Speicherung mit Fehlerbehandlung in IndexedDB.
-- `src/imports/ImportFlow.tsx`: fünf Schritte, Vorschau und Bibliothek; `imports.css`: responsive KLOQI-Gestaltung.
+- `src/imports/ImportFlow.tsx`: fünf Schritte, Vorschau und Bibliothek; `imports.css`: responsive CLOQI-Gestaltung.
 - `test/imports.test.ts`: CSV-Sonderfälle, Mapping, Dubletten, ungültige Datumswerte, Varianten, Rollen und echte XLSX-/DOCX-Dateien. Synthetische Fixtures unter `test/fixtures/imports` enthalten keine Kundendaten.
 
 Parser-Grundlagen: [ExcelJS](https://github.com/exceljs/exceljs), [Mammoth](https://github.com/mwilliamson/mammoth.js), [PDF.js](https://mozilla.github.io/pdf.js/getting_started/). Die Parser werden erst beim jeweiligen Dateiimport geladen; ihre größeren separaten Bundles sind im Build sichtbar.

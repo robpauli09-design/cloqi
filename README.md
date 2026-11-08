@@ -1,4 +1,4 @@
-# KLOQI
+# CLOQI
 
 Deutschsprachige Anwendung für Prozessverbesserungen mit React, TypeScript und Vite. Das Backend verbindet OpenAI für KI-Antworten und Supabase für Anmeldung und gespeicherte Arbeitsbereiche. Vercel kann Oberfläche und API gemeinsam aus diesem Repository bereitstellen.
 
@@ -17,7 +17,7 @@ Deutschsprachige Anwendung für Prozessverbesserungen mit React, TypeScript und 
 | Fabrikbild, Prozesse, Kennzahlen, Diagramme, Team und Wissensartikel | Statische Beispieldaten, keine Maschinen-, ERP- oder MES-Anbindung. |
 | Einsparungen und Fabrikverbesserungen | Illustrative Simulation; erledigte Aufgaben erzeugen keine gemessenen Produktionswerte. |
 
-Die KI erhält ausgewählte Beispielprozesse bzw. Artikel und bei Chat/Analyse einen begrenzten Aufgabenkontext. Eine echte Antwort macht Beispieldaten nicht zu Betriebsdaten. KLOQI versendet keine Teamnachrichten und steuert keine Maschinen. Wissensartikel ersetzen keine freigegebenen Betriebsanweisungen. Chatverlauf und einzelne Artikelzusammenfassungen werden nicht dauerhaft im Arbeitsbereich gespeichert. Der Standortschalter verwendet denselben Beispieldatensatz unter verschiedenen Namen. Teameinladungen sind noch nicht implementiert; Mitgliedschaften verwaltet derzeit ein Datenbankadministrator.
+Die KI erhält ausgewählte Beispielprozesse bzw. Artikel und bei Chat/Analyse einen begrenzten Aufgabenkontext. Eine echte Antwort macht Beispieldaten nicht zu Betriebsdaten. CLOQI versendet keine Teamnachrichten und steuert keine Maschinen. Wissensartikel ersetzen keine freigegebenen Betriebsanweisungen. Chatverlauf und einzelne Artikelzusammenfassungen werden nicht dauerhaft im Arbeitsbereich gespeichert. Der Standortschalter verwendet denselben Beispieldatensatz unter verschiedenen Namen. Teameinladungen sind noch nicht implementiert; Mitgliedschaften verwaltet derzeit ein Datenbankadministrator.
 
 ## Lokal starten
 
@@ -57,15 +57,15 @@ Der Produktionsbuild liegt in `dist/`. `npm run preview` zeigt nur den statische
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Öffentlicher Publishable Key, normalerweise beginnend mit `sb_publishable_`. |
 | `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | Optionale Server-Aliase. Sonst verwendet das Backend die beiden `VITE_SUPABASE_*`-Werte. Falls gesetzt, dasselbe Projekt wie im Frontend verwenden. |
 | `ALLOWED_ORIGINS` | Optional: zusätzliche Browser-Ursprünge, durch Kommas getrennt, mit Protokoll und ohne Pfad. Der eigene Ursprung ist automatisch erlaubt. |
-| `VITE_API_BASE_URL` | Optional: Backend-Ursprung, etwa `https://kloqi.example.com`, ohne `/api`. Im gemeinsamen Vercel-Projekt leer lassen; für spätere getrennte Clients vorgesehen. |
+| `VITE_API_BASE_URL` | Optional: Backend-Ursprung, etwa `https://cloqi.example.com`, ohne `/api`. Im gemeinsamen Vercel-Projekt leer lassen; für spätere getrennte Clients vorgesehen. |
 
 Alle `VITE_`-Variablen werden öffentlich in den Frontend-Build eingebaut. Der OpenAI-Schlüssel darf **niemals** dieses Präfix erhalten. Diese Anwendung braucht keinen Supabase Secret Key und keinen `service_role`-Schlüssel: Sie nutzt den Publishable Key zusammen mit dem Zugriffstoken des angemeldeten Benutzers. Siehe [Supabase API-Schlüssel](https://supabase.com/docs/guides/getting-started/api-keys).
 
 ## Supabase erstmals einrichten
 
 1. Im [Supabase-Dashboard](https://supabase.com/dashboard) eine Organisation und ein neues Projekt anlegen. Region und Datenbankpasswort wählen, dann auf die Bereitstellung warten. Das Datenbankpasswort ist kein `.env`-Wert.
-2. Im **SQL Editor** die vollständige Datei `supabase/migrations/202609220001_kloqi_backend.sql` einmal ausführen. Sie richtet Arbeitsbereiche, Mitgliedschaften, gespeicherte Zustände, KI-Limits und Berechtigungen ein. Einzelne Tabellen allein reichen nicht. Details: `supabase/README.md`.
-3. In den Data-API-Einstellungen `public` exponiert lassen. **`kloqi_private` darf nicht exponiert werden.** Die Migration enthält die nötigen Grants und RLS-Regeln; keine pauschalen Schreibrechte ergänzen.
+2. Im **SQL Editor** die Dateien in `supabase/migrations/` vollständig und in dieser Reihenfolge je einmal ausführen: `202609220001_kloqi_backend.sql` (Arbeitsbereiche, Mitgliedschaften, gespeicherte Zustände, KI-Limits, Berechtigungen), `202609230001_demo_ai_quota.sql` (gemeinsames Demo-Budget), `202611080001_cloqi_rename.sql` (Umbenennung KLOQI → CLOQI). Einzelne Tabellen allein reichen nicht. Bestehende Datenbanken brauchen nur die noch fehlenden Dateien. Details: `supabase/README.md`.
+3. In den Data-API-Einstellungen `public` exponiert lassen. **`cloqi_private` darf nicht exponiert werden.** Die Migration enthält die nötigen Grants und RLS-Regeln; keine pauschalen Schreibrechte ergänzen.
 4. Im **Connect**-Dialog Projekt-URL und Publishable Key kopieren; alternativ den Schlüssel unter **Settings → API Keys** finden. Die beiden `VITE_SUPABASE_*`-Werte in `.env` setzen.
 5. Unter **Authentication → URL Configuration** zunächst `http://localhost:5173` als **Site URL** setzen. Redirect URLs: `http://localhost:5173/**` und bei Nutzung auch `http://127.0.0.1:5173/**`.
 6. Nach dem Vercel-Deployment die **Site URL** auf die feste Produktionsadresse umstellen, etwa `https://dein-projekt.vercel.app`. Diese tatsächliche Rücksprungadresse mit abschließendem `/` zusätzlich erlauben. Lokale Einträge können bestehen bleiben; für Preview-Tests nur die benötigten Preview-Adressen ergänzen.
@@ -77,7 +77,7 @@ Beim ersten angemeldeten Laden richtet die App einen Arbeitsbereich ein; später
 
 Diese Einrichtung ist noch ausstehend und wurde nicht automatisch ausgeführt.
 
-1. Das private Repository [robpauli09-design/kloqi](https://github.com/robpauli09-design/kloqi) verwenden. Es enthält Lockfile, `.env.example`, `vercel.json` und SQL-Migration. Die echte `.env` ist vom Upload ausgeschlossen.
+1. Das private Repository [robpauli09-design/cloqi](https://github.com/robpauli09-design/cloqi) verwenden. Es enthält Lockfile, `.env.example`, `vercel.json` und SQL-Migration. Die echte `.env` ist vom Upload ausgeschlossen.
 2. In [Vercel](https://vercel.com/new) das Repository importieren. Repository-Hauptverzeichnis als Root Directory, **Vite** als Framework und Node.js **24.x** verwenden.
 3. `vercel.json` setzt Installation auf `npm ci`, Build auf `npm run build` und Ausgabe auf `dist`. Die Dateien in `api/` werden zusätzlich als Functions bereitgestellt.
 4. Unter **Settings → Environment Variables** mindestens `OPENAI_API_KEY`, `OPENAI_MODEL`, `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY` setzen. Production erhält die Produktionswerte; Preview braucht passende eigene Werte, idealerweise ein Test-Supabase-Projekt. Zusätzliche Server-Aliase sind nicht nötig.
@@ -121,7 +121,7 @@ Cloud-KI-Limits: **20 Anfragen pro UTC-Minute und 200 pro UTC-Tag je Benutzer**,
 - `api/status.ts`, `api/ai.ts`, `api/workspace.ts`: Vercel-Einstiegspunkte; `server/`: gemeinsame API-Logik und lokaler Server.
 - `supabase/migrations/`: SQL-Einrichtung; `test/`: automatisierte Prüfungen.
 - `src/useWorkspaceTools.ts`: optionale WebMCP-Aktionen per Feature Detection; ohne Unterstützung bleibt die Oberfläche bedienbar.
-- `src/styles.css`: KLOQI-Farbpalette und responsive Komponenten.
+- `src/styles.css`: CLOQI-Farbpalette und responsive Komponenten.
 
 ## Später als mobile oder Desktop-App
 
@@ -140,4 +140,4 @@ Native Clients brauchen zusätzlich Login-Deep-Links, Sitzungsspeicherung, Signi
 
 ## Bildquellen
 
-Die Maskottchen unter `public/assets/kloqi-*.png` sind unveränderte Kopien der bereitgestellten Bilder. `public/assets/factory.png` wurde mit ImageGen für diesen Prototyp erzeugt; Prompt siehe `ASSETS.md`. Die Fabrik ist eine stilisierte Illustration und kein maßstabsgetreuer realer Standort.
+Die Maskottchen unter `public/assets/cloqi-*.png` sind unveränderte Kopien der bereitgestellten Bilder. `public/assets/factory.png` wurde mit ImageGen für diesen Prototyp erzeugt; Prompt siehe `ASSETS.md`. Die Fabrik ist eine stilisierte Illustration und kein maßstabsgetreuer realer Standort.

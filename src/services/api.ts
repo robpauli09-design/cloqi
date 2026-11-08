@@ -69,7 +69,7 @@ export async function getBackendStatus(): Promise<BackendStatus> {
 }
 export async function requestAI(input: unknown, signal?: AbortSignal) {
   let demo = false;
-  try { demo = Boolean(restoreDemo(localStorage.getItem('kloqi_user'))); } catch { /* no persisted session */ }
+  try { demo = Boolean(restoreDemo(localStorage.getItem('cloqi_user'))); } catch { /* no persisted session */ }
   const parsed = aiRequestSchema.parse(input);
   if(demo&&!reserveDemoRequest())throw new ApiError(429,'demo_browser_limit',`Deine ${demoDailyLimit} Demo-Anfragen für heute sind aufgebraucht. Morgen (UTC) geht es weiter.`);
   let body: unknown;

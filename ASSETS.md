@@ -11,7 +11,7 @@ Vollständiger Generierungsprompt:
 
 ```text
 Use case: stylized-concept
-Asset type: standalone industrial campus illustration for a premium KLOQI B2B operations dashboard, used beneath clickable HTML process cards.
+Asset type: standalone industrial campus illustration for a premium CLOQI B2B operations dashboard, used beneath clickable HTML process cards.
 Primary request: one high-end 3D isometric Austrian sugar factory diorama, wide landscape 3:2 composition.
 Scene/backdrop: a completely isolated miniature campus on a uniform flat warm cream #F7F4EC background, no horizon.
 Subject: a detailed but clean sugar factory campus with white and soft gray factory halls, tall silver cylindrical silos, warm yellow industrial piping, lime green #8BCF32 accents, abundant little green trees, a road loop containing exactly two delivery trucks, tidy warehouse pallets, and beet fields along the left side.
@@ -27,8 +27,8 @@ Constraints: one image only. No interface, no UI, no labels, no callouts, no cha
 
 Vom Nutzer bereitgestellt, unverändert kopiert:
 
-- `public/assets/kloqi-green.png` – normaler Betrieb, Begleitung
-- `public/assets/kloqi-yellow.png` – mittlere und hohe Aufgabenpriorität
-- `public/assets/kloqi-red.png` – kritische Aufgabenpriorität
+- `public/assets/cloqi-green.png` – normaler Betrieb, Begleitung
+- `public/assets/cloqi-yellow.png` – mittlere und hohe Aufgabenpriorität
+- `public/assets/cloqi-red.png` – kritische Aufgabenpriorität
 
 Die vorhandenen Beispielaufgaben decken Niedrig, Mittel und Hoch ab; Kritisch ist im Modell und der Darstellung vorbereitet.

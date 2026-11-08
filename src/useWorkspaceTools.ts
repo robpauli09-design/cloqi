@@ -46,8 +46,8 @@ export function useWorkspaceTools(workspace: Workspace) {
       }
     };
     register({
-      name: "kloqi_read_workspace",
-      title: "KLOQI-Workspace lesen",
+      name: "cloqi_read_workspace",
+      title: "CLOQI-Workspace lesen",
       description:
         "Liest den aktuellen lokalen Demo-Fortschritt und Aufgabenstatus. Ändert keine Daten.",
       inputSchema: {
@@ -69,8 +69,8 @@ export function useWorkspaceTools(workspace: Workspace) {
       }),
     });
     register({
-      name: "kloqi_open_process",
-      title: "KLOQI-Prozess öffnen",
+      name: "cloqi_open_process",
+      title: "CLOQI-Prozess öffnen",
       description:
         "Öffnet die Detailansicht eines Beispielprozesses. Analysiert und verändert keine Produktionsdaten.",
       inputSchema: {

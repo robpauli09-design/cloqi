@@ -429,7 +429,7 @@ export function ImportFlow({
       unknown: "Noch gemeinsam zu klären",
     } as Record<string, string>
   )[source];
-  const plan = `Importplan: ${area}\nQuelle: ${sourceLabel}\nERP: ${systems.erp || "Noch offen"}\nCRM: ${systems.crm || "Noch offen"}\nDokumentenablage: ${systems.files || "Noch offen"}\n\n1. Einen kleinen Export mit Vorgangs-ID, Aktivität und Zeitpunkt bereitstellen (CSV/XLSX/JSON).\n2. Rollen, Quellsystem und Kosten ergänzen, soweit vorhanden.\n3. Passende SOPs als PDF/DOCX/TXT ergänzen.\n4. Dateien in KLOQI prüfen und die Zuordnung bestätigen.\n\nEine direkte Verbindung und ein Local Data Gateway sind noch nicht eingerichtet. Für spätere Connectoren werden Datenumfang, Read-only-Berechtigungen und Betriebsort separat abgestimmt.`;
+  const plan = `Importplan: ${area}\nQuelle: ${sourceLabel}\nERP: ${systems.erp || "Noch offen"}\nCRM: ${systems.crm || "Noch offen"}\nDokumentenablage: ${systems.files || "Noch offen"}\n\n1. Einen kleinen Export mit Vorgangs-ID, Aktivität und Zeitpunkt bereitstellen (CSV/XLSX/JSON).\n2. Rollen, Quellsystem und Kosten ergänzen, soweit vorhanden.\n3. Passende SOPs als PDF/DOCX/TXT ergänzen.\n4. Dateien in CLOQI prüfen und die Zuordnung bestätigen.\n\nEine direkte Verbindung und ein Local Data Gateway sind noch nicht eingerichtet. Für spätere Connectoren werden Datenumfang, Read-only-Berechtigungen und Betriebsort separat abgestimmt.`;
   if (saved)
     return (
       <div className="import-flow">

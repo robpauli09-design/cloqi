@@ -11,7 +11,7 @@ import { useAuth } from "../auth/AuthProvider";
 import { initialTasksFor } from "../auth/users";
 import type { DemoUser } from "../auth/users";
 
-const storageKeyFor = (user?:DemoUser) => !user || user.role==='management' ? 'kloqi-demo-v1' : `kloqi-demo-v1-${user.username}`;
+const storageKeyFor = (user?:DemoUser) => !user || user.role==='management' ? 'cloqi-demo-v1' : `cloqi-demo-v1-${user.username}`;
 function localState(user?:DemoUser): WorkspaceState {
   try {
     const raw = localStorage.getItem(storageKeyFor(user));
@@ -195,7 +195,7 @@ function WorkspaceStore({
     );
     const link = document.createElement("a");
     link.href = url;
-    link.download = "kloqi-workspace-backup.json";
+    link.download = "cloqi-workspace-backup.json";
     link.click();
     URL.revokeObjectURL(url);
   }

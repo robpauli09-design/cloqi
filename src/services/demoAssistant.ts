@@ -27,13 +27,13 @@ export function answerDemoQuestion(
       actions: false,
     };
   }
-  if (/hallo|hilfe|kloqi|start/.test(question))
+  if (/hallo|hilfe|cloqi|start/.test(question))
     return {
       text: "Hallo Julia! Ich helfe dir, die Beispielprozesse besser zu verstehen. Öffne eine Fabrikkarte, starte eine Prozessanalyse oder schau dir das Wissen zu Linie 3 an. Was möchtest du als Nächstes verbessern?",
       actions: false,
     };
   return {
-    text: "Ich kann in dieser Demo Fragen zum Verpackungsprozess, zu offenen Aufgaben und zum Einstieg in KLOQI beantworten. Für diese Frage liegt mir keine vorbereitete Antwort vor. Ein guter Start ist: „Warum dauert die Verpackung länger?“",
+    text: "Ich kann in dieser Demo Fragen zum Verpackungsprozess, zu offenen Aufgaben und zum Einstieg in CLOQI beantworten. Für diese Frage liegt mir keine vorbereitete Antwort vor. Ein guter Start ist: „Warum dauert die Verpackung länger?“",
     actions: false,
   };
 }

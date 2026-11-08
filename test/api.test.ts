@@ -15,7 +15,7 @@ const cloud = {
 };
 const input = { action: "summarize", articleId: "quality" };
 function req(path = "/api/ai", body: unknown = input, extra: RequestInit = {}) {
-  return new Request(`https://kloqi.example${path}`, {
+  return new Request(`https://cloqi.example${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -24,7 +24,7 @@ function req(path = "/api/ai", body: unknown = input, extra: RequestInit = {}) {
 }
 test("status exposes configuration flags, never credentials", async () => {
   const r = await createHandler()(
-    new Request("https://kloqi.example/api/status"),
+    new Request("https://cloqi.example/api/status"),
     cloud,
   );
   assert.equal(r.status, 200);
@@ -134,8 +134,8 @@ test("request validation blocks malformed JSON, unsupported inputs, large bodies
     [req("/api/ai", { ...input, apiKey: "not-allowed" }), 400],
     [req("/api/ai", input, { headers: { "Content-Type": "text/plain" } }), 415],
     [req("/api/ai", input, { body: "x".repeat(65537) }), 413],
-    [new Request("https://kloqi.example/api/ai"), 405],
-    [new Request("https://kloqi.example/api/unknown"), 404],
+    [new Request("https://cloqi.example/api/ai"), 405],
+    [new Request("https://cloqi.example/api/unknown"), 404],
   ];
   for (const [request, status] of cases)
     assert.equal((await h(request, local)).status, status);
@@ -161,7 +161,7 @@ test("CORS rejects untrusted origins and allows explicit native clients", async 
     403,
   );
   const r = await h(
-    new Request("https://kloqi.example/api/ai", {
+    new Request("https://cloqi.example/api/ai", {
       method: "OPTIONS",
       headers: {
         Origin: "capacitor://localhost",

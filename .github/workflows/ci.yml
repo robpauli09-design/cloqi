@@ -1,4 +1,4 @@
-name: KLOQI checks
+name: CLOQI checks
 on:
   push:
     branches: [main]
