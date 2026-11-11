@@ -106,19 +106,25 @@ strong {
 .app-shell {
   min-height: 100vh;
 }
+/* Sidebar: sized so the full management menu, the CLOQI card and the
+   settings/help links fit a 700px-high laptop window without scrolling.
+   Shorter windows drop decoration first (see max-height queries below). */
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
   width: 220px;
   border-right: 1px solid var(--border);
   background: #fffefa;
-  padding: 27px 19px 12px;
+  padding: 22px 16px 12px;
   display: flex;
   flex-direction: column;
   z-index: 20;
   overflow-x: hidden;
   overflow-y: auto;
-  scrollbar-width: thin;
+  scrollbar-width: none;
+}
+.sidebar::-webkit-scrollbar {
+  display: none;
 }
 .sidebar > * {
   min-width: 0;
@@ -126,14 +132,14 @@ strong {
 }
 .brand {
   text-align: left;
-  margin: 0 10px 40px;
+  margin: 0 10px 22px;
   padding: 0;
 }
 .wordmark {
   font-family: "Arial Black", Arial, sans-serif;
-  font-size: 41px;
+  font-size: 32px;
   line-height: 1.1;
-  letter-spacing: -2.5px;
+  letter-spacing: -2px;
   font-weight: 900;
   display: block;
 }
@@ -147,7 +153,7 @@ strong {
   font-size: 10px;
   letter-spacing: 0.05px;
   display: block;
-  margin-top: 8px;
+  margin-top: 5px;
   color: #565e56;
 }
 .workspace-label {
@@ -155,20 +161,23 @@ strong {
   letter-spacing: 1.9px;
   color: #969b90;
   font-weight: 600;
-  padding: 0 13px 15px;
+  padding: 0 12px 8px;
 }
 .sidebar nav {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 7px;
+  gap: 2px;
 }
 .sidebar .nav-item {
   min-width: 0;
-  white-space: normal;
+  min-height: 40px;
+  padding: 9px 12px;
+  gap: 12px;
 }
 .sidebar .nav-item > span:not(.ai-tag) {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .sidebar .nav-item b,
 .sidebar .ai-tag {
@@ -223,50 +232,62 @@ strong {
 }
 .sidebar-bottom {
   margin-top: auto;
-  padding-top: 38px;
+  padding-top: 18px;
 }
 .mascot-note {
   position: relative;
-  text-align: center;
-  padding: 0 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  border-radius: 12px;
+  background: #f4f7ec;
+  border: 1px solid #e6ecda;
 }
-.mascot-note img {
-  width: 114px;
-  height: 136px;
-  object-fit: cover;
-  object-position: center 14%;
-  mix-blend-mode: multiply;
-  margin-bottom: 6px;
+/* Crops the full-body mascot image to its face (hat to chin). */
+.mascot-face {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #fff url("/assets/cloqi-green.png") 46% 4% / 230% auto no-repeat;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px #dfe8cf;
+}
+.mascot-note > div {
+  min-width: 0;
 }
 .mascot-note strong {
-  font-size: 15px;
-  line-height: 1.45;
+  font-size: 12px;
+  line-height: 1.3;
   display: block;
 }
 .mascot-note p {
-  font-size: 11px;
-  line-height: 1.7;
-  margin-top: 8px;
+  font-size: 10px;
+  line-height: 1.35;
+  margin-top: 3px;
+  color: #6b716a;
 }
 .little-spark {
   position: absolute;
-  top: 34px;
-  right: 22px;
+  top: 4px;
+  left: 50px;
   color: var(--gold);
-  font-size: 25px;
+  font-size: 13px;
   transform: rotate(20deg);
 }
 .sidebar-bottom .nav-item {
   font-size: 13px;
-  padding: 10px 13px;
+  min-height: 36px;
+  padding: 7px 12px;
 }
 .sidebar-bottom .nav-item > svg:last-child:not(:first-child) {
   margin-left: auto;
 }
 .sidebar-foot {
   border-top: 1px solid var(--border);
-  padding: 17px 6px 0;
-  margin-top: 16px;
+  padding: 10px 6px 0;
+  margin-top: 8px;
   font-size: 9px;
   color: #7f877d;
   display: flex;
@@ -284,6 +305,35 @@ strong {
   border-radius: 50%;
   background: #76aa43;
   flex-shrink: 0;
+}
+/* Short windows: drop the card, then the slogan, before anything scrolls. */
+@media (max-height: 680px) {
+  .sidebar .mascot-note {
+    display: none;
+  }
+}
+@media (max-height: 580px) {
+  .sidebar {
+    padding-top: 16px;
+  }
+  .brand {
+    margin-bottom: 12px;
+  }
+  .brand small,
+  .workspace-label {
+    display: none;
+  }
+  .sidebar .nav-item {
+    min-height: 36px;
+    padding-block: 7px;
+  }
+  .sidebar-bottom {
+    padding-top: 10px;
+  }
+  .sidebar-bottom .nav-item {
+    min-height: 32px;
+    padding-block: 5px;
+  }
 }
 .workspace {
   margin-left: 220px;
@@ -1430,7 +1480,7 @@ strong {
     margin-inline: 4px;
   }
   .sidebar .wordmark {
-    font-size: 36px;
+    font-size: 29px;
   }
   .workspace {
     margin-left: 190px;
@@ -1582,7 +1632,7 @@ strong {
     padding-inline: 13px;
   }
   .brand {
-    margin: 5px 0 37px;
+    margin: 5px 0 22px;
     text-align: center;
   }
   .sidebar .wordmark {
@@ -1604,7 +1654,7 @@ strong {
   }
   .sidebar .nav-item {
     font-size: 0;
-    padding: 15px;
+    padding: 10px;
     justify-content: center;
   }
   .sidebar .nav-item svg {
@@ -4177,9 +4227,6 @@ textarea:focus-visible {
 .global-search input {
   font-size: 12px;
 }
-.mascot-note img {
-  display: inline-block;
-}
 .ask-card img {
   pointer-events: none;
 }
@@ -4481,5 +4528,15 @@ button.demo-badge {
   #main-content :is(input, textarea) {
     hyphens: manual;
     -webkit-hyphens: manual;
+  }
+}
+/* Icon-only sidebar in a short window: keep every icon reachable without scrolling. */
+@media (max-width: 1000px) and (max-height: 580px) {
+  .sidebar .brand {
+    margin-bottom: 10px;
+  }
+  .sidebar .nav-item {
+    min-height: 36px;
+    padding: 7px;
   }
 }

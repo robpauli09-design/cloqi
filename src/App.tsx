@@ -58,7 +58,7 @@ export const processIcons = {
 const baseNav = [
   { id: "home", label: "Home", icon: Home },
   { id: "processes", label: "Prozesse", icon: Workflow },
-  { id: "import", label: "Daten importieren", icon: Upload },
+  { id: "import", label: "Datenimport", icon: Upload },
   { id: "tasks", label: "Aufgaben", icon: ListTodo },
   { id: "analytics", label: "Analysen", icon: ChartNoAxesCombined },
   { id: "team", label: "Team", icon: Users },
@@ -389,21 +389,16 @@ export default function App() {
         </nav>
         <div className="sidebar-bottom">
           <div className="mascot-note">
-            <img
-              src="/assets/cloqi-green.png"
-              alt="CLOQI, dein grüner Prozessbegleiter"
+            <span
+              className="mascot-face"
+              role="img"
+              aria-label="CLOQI, dein grüner Prozessbegleiter"
             />
-            <div className="little-spark">✦</div>
-            <strong>
-              Kleine Schritte.
-              <br />
-              Große Wirkung.
-            </strong>
-            <p>
-              Zusammen machen wir
-              <br />
-              Arbeit ein bisschen besser.
-            </p>
+            <div>
+              <strong>Kleine Schritte.<br />Große Wirkung.</strong>
+              <p>Gemeinsam Arbeit besser machen.</p>
+            </div>
+            <span className="little-spark" aria-hidden="true">✦</span>
           </div>
           <button
             aria-label="Einstellungen"
