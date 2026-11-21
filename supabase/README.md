@@ -3,7 +3,8 @@
 Create a Supabase project, then run the complete contents of each file in
 `migrations/` in its SQL Editor as the database owner, once each and in
 filename order (`202609220001_kloqi_backend.sql`,
-`202609230001_demo_ai_quota.sql`, `202611080001_cloqi_rename.sql`). An
+`202609230001_demo_ai_quota.sql`, `202611080001_cloqi_rename.sql`,
+`202611180001_ai_queue.sql`). An
 existing database only needs the files it has not run yet. Alternatively use
 the Supabase CLI migration workflow after linking your project. Keep
 `cloqi_private` out of the API's **Exposed schemas** setting. The first two

@@ -11,14 +11,6 @@ export interface AuthContext {
   userId: string;
   client: SupabaseClient;
 }
-export async function claimDemoQuota(config: ServerConfig): Promise<number> {
-  if (!hasSupabase(config)) throw new HttpError(503, "demo_quota_missing", "Für die Demo-KI muss Supabase konfiguriert sein.");
-  const client = createClient(config.supabaseUrl, config.supabaseKey, {auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false}});
-  const {data,error} = await client.rpc("claim_demo_ai_quota");
-  if (error?.message?.includes("demo_rate_limit")) throw new HttpError(429,"demo_rate_limit","Die Demo macht kurz Pause: maximal 3 Anfragen pro Minute und 50 pro UTC-Tag für alle Besucher zusammen. Bitte später erneut versuchen.");
-  if (error || !Number.isInteger(data) || data < 0 || data > 49) throw new HttpError(503,"demo_quota_unavailable","Das Demo-Kontingent ist gerade nicht erreichbar. Es wurde keine KI-Anfrage gestartet.");
-  return data;
-}
 export async function authenticate(
   request: Request,
   config: ServerConfig,
@@ -128,14 +120,4 @@ export async function saveWorkspace(
     state: parseWorkspace(row.state),
     revision: row.revision,
   };
-}
-export async function claimQuota(auth: AuthContext) {
-  const { data, error } = await auth.client.rpc("claim_ai_request");
-  if (error) databaseError(error);
-  if (data !== true)
-    throw new HttpError(
-      429,
-      "rate_limit",
-      "Dein KI-Limit ist erreicht (20 Anfragen pro Minute, 200 pro Tag). Bitte versuche es später erneut.",
-    );
 }

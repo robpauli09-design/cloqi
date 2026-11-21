@@ -908,7 +908,7 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
                     {aiMode === "live" ? "Echte KI" : "Demo-Assistent"}
                   </small>
                 </div>
-                <span className="demo-badge">{aiMode==='live'?'OpenAI · Live':'Mock-Antworten'}</span>
+                <span className="demo-badge">{aiMode==='live'?'CLOQI KI · Live':'Mock-Antworten'}</span>
               </div>
               <div className="role-chat-messages" role="log" aria-live="polite">
                 {messages.length === 0 ? (
@@ -938,7 +938,7 @@ export function RoleViews({ user, page, tasks, toggleTask, go }: Props) {
                       <p>{message.text}</p>
                       {message.role === "assistant" && (
                         <small>
-                          {message.live?'OpenAI-Antwort · Beispieldaten':'Vorbereitete Demo-Antwort · Keine Maschinensteuerung'}
+                          {message.live?'KI-Antwort · Beispieldaten':'Vorbereitete Demo-Antwort · Keine Maschinensteuerung'}
                         </small>
                       )}
                     </div>

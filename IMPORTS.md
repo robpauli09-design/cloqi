@@ -26,7 +26,7 @@ Datumsfelder: ISO mit Offset wird nach UTC normalisiert. Ohne Offset wird UTC an
 
 ## Daten und Grenzen
 
-Die Verarbeitung geschieht im Browser. Keine Importdaten werden an OpenAI, Supabase oder andere Server übertragen. IndexedDB `cloqi-imports` speichert pro Prototyp-Benutzer. Browserdaten löschen entfernt die Importe; andere Geräte erhalten sie nicht. Die Quelldateien bleiben bis zur Bestätigung nur im Arbeitsspeicher. Nicht gespeicherte Entwürfe gehen beim Verlassen/Neuladen verloren.
+Die Verarbeitung geschieht im Browser. Keine Importdaten werden an den KI-Server, Supabase oder andere Server übertragen. IndexedDB `cloqi-imports` speichert pro Prototyp-Benutzer. Browserdaten löschen entfernt die Importe; andere Geräte erhalten sie nicht. Die Quelldateien bleiben bis zur Bestätigung nur im Arbeitsspeicher. Nicht gespeicherte Entwürfe gehen beim Verlassen/Neuladen verloren.
 
 Optionale Pseudonymisierung ersetzt ausschließlich die zugeordnete Personen-/Rollenspalte durch importlokale IDs. Sie anonymisiert keine Dokumente, Vorgangs-IDs oder Freitexte.
 

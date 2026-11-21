@@ -1,8 +1,8 @@
 # CLOQI
 
-Deutschsprachige Anwendung für Prozessverbesserungen mit React, TypeScript und Vite. Das Backend verbindet OpenAI für KI-Antworten und Supabase für Anmeldung und gespeicherte Arbeitsbereiche. Vercel kann Oberfläche und API gemeinsam aus diesem Repository bereitstellen.
+Deutschsprachige Anwendung für Prozessverbesserungen mit React, TypeScript und Vite. Das Backend verbindet einen eigenen KI-Server (LocalAI, OpenAI-kompatible Schnittstelle) für KI-Antworten und Supabase für Anmeldung und gespeicherte Arbeitsbereiche. Vercel kann Oberfläche und API gemeinsam aus diesem Repository bereitstellen.
 
-**Aktueller Prototyp:** Ein gemeinsamer Benutzername-/Passwort-Login öffnet automatisch Management, Abteilungsleitung oder Mitarbeiteransicht. JuliaSommer, SarahBerger und LukasHuber verwenden jeweils `123456`. Diese öffentlichen Demo-Zugänge speichern Aufgaben lokal; sie sind keine produktive Authentifizierung. Das Backend ist vorbereitet, Supabase-Projekt und Vercel-Projekt wurden angelegt. Echte Demo-KI benötigt den serverseitigen OpenAI-Schlüssel, `DEMO_AI_ENABLED=true` und die Demo-Kontingent-Migration. Die weiter unten beschriebene Supabase-Anmeldung ist die Grundlage für eine spätere produktive Anmeldung, nicht ein zweiter Login in der aktuellen Oberfläche.
+**Aktueller Prototyp:** Ein gemeinsamer Benutzername-/Passwort-Login öffnet automatisch Management, Abteilungsleitung oder Mitarbeiteransicht. JuliaSommer, SarahBerger und LukasHuber verwenden jeweils `123456`. Diese öffentlichen Demo-Zugänge speichern Aufgaben lokal; sie sind keine produktive Authentifizierung. Das Backend ist vorbereitet, Supabase-Projekt und Vercel-Projekt wurden angelegt. Echte Demo-KI benötigt den konfigurierten KI-Server (`AI_BASE_URL`, `AI_MODEL`), `DEMO_AI_ENABLED=true` und die Demo-Kontingent-Migration. Die weiter unten beschriebene Supabase-Anmeldung ist die Grundlage für eine spätere produktive Anmeldung, nicht ein zweiter Login in der aktuellen Oberfläche.
 
 **Datenimport:** Unter „Daten importieren“ können Management und Abteilungsleitung CSV, XLSX, JSON, PDF, DOCX und TXT einlesen, Zuordnungen prüfen und Prozessdaten übernehmen. Verarbeitung und Speicherung erfolgen lokal im Browser. Details, Grenzen und Datenschutz: [Lokaler Import-Flow](IMPORTS.md).
 
@@ -10,7 +10,7 @@ Deutschsprachige Anwendung für Prozessverbesserungen mit React, TypeScript und 
 
 | Bereich | Verhalten |
 | --- | --- |
-| Assistent, Prozessanalyse, Artikelzusammenfassung | Mit konfiguriertem Schlüssel echte OpenAI-Anfragen über den Server. Ohne Schlüssel ausdrücklich gekennzeichnete Demo-Antworten. Ein Fehler bei einem echten Aufruf wird angezeigt und nicht durch eine Demo-Antwort verdeckt. |
+| Assistent, Prozessanalyse, Artikelzusammenfassung | Mit konfiguriertem KI-Server echte Anfragen über das Backend. Ohne KI-Server ausdrücklich gekennzeichnete Demo-Antworten. Ein Fehler bei einem echten Aufruf wird angezeigt und nicht durch eine Demo-Antwort verdeckt. |
 | Anmeldung | Drei lokale Prototyp-Konten mit automatischer Rollenansicht; keine manuelle Rollenauswahl. |
 | Aufgaben, Missionsfortschritt, Feedback, Einstellungen, KI-Prozessanalysen | Bei den Prototyp-Konten getrennt im Browser; Supabase-Arbeitsbereiche sind im Backend für echte Auth-Sitzungen vorbereitet. |
 | Unternehmensdaten-Import | Lokale Dateiverarbeitung und bestätigte Speicherung in IndexedDB; kein automatischer Versand an Cloud oder KI. |
@@ -36,7 +36,7 @@ npm run dev
 
 Die App läuft unter [http://localhost:5173](http://localhost:5173). Der gemeinsame Entwicklungsserver `server/dev.ts` lädt `.env`, bedient `/api` und bindet Vite für die Oberfläche ein. Nach Änderungen an `.env` neu starten. Der Kopierbefehl überschreibt keine vorhandene `.env`.
 
-Für lokale KI-Tests reicht zunächst `OPENAI_API_KEY`. Ohne Supabase bleiben Arbeitsbereiche im Browser; dieser Entwicklungsmodus ist für den lokalen Rechner gedacht. Auf Vercel erfordern geschützte API-Funktionen eine gültige Supabase-Anmeldung.
+Für lokale KI-Tests reichen zunächst `AI_BASE_URL` und `AI_MODEL`. Ohne Supabase bleiben Arbeitsbereiche im Browser; dieser Entwicklungsmodus ist für den lokalen Rechner gedacht. Auf Vercel erfordern geschützte API-Funktionen eine gültige Supabase-Anmeldung.
 
 ```powershell
 npm test
@@ -51,20 +51,23 @@ Der Produktionsbuild liegt in `dist/`. `npm run preview` zeigt nur den statische
 
 | Variable | Zweck |
 | --- | --- |
-| `OPENAI_API_KEY` | Geheimer OpenAI-API-Schlüssel, ausschließlich auf dem Server. |
-| `OPENAI_MODEL` | Modellname; Standard im Code: `gpt-5-mini`. Das OpenAI-Projekt benötigt Zugriff auf dieses Modell. |
+| `AI_BASE_URL` | Adresse des eigenen KI-Servers inklusive `/v1`, etwa `http://65.21.215.168:8086/v1`. Nur auf dem Server. |
+| `AI_MODEL` | Modellname auf dem KI-Server (Liste: `<AI_BASE_URL>/models`). Empfohlen: `qwen3.6-35b-a3b` (35 Mrd. Parameter, davon 3 Mrd. aktiv, läuft gut auf der CPU). |
+| `AI_PROMPT_FORMAT` | `chatml` für den CLOQI-LocalAI-Server: CLOQI setzt den Qwen-Prompt selbst zusammen und nutzt `/completions`, weil dessen Chat-Endpunkte die Antwort verlieren. Standard `chat` für OpenAI-kompatible Server mit funktionierendem Chat-Endpunkt. |
+| `AI_API_KEY` | Optional: nur nötig, wenn auf dem KI-Server ein API-Schlüssel gesetzt ist. Ausschließlich auf dem Server. |
+| `AI_TIMEOUT_MS` | Optional: Wartezeit auf die KI, Standard 150000, höchstens 170000 (Vercel bricht nach 180 s ab). |
 | `VITE_SUPABASE_URL` | Öffentliche Supabase-Projekt-URL für Anmeldung und Cloud-Speicherung. |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | Öffentlicher Publishable Key, normalerweise beginnend mit `sb_publishable_`. |
 | `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | Optionale Server-Aliase. Sonst verwendet das Backend die beiden `VITE_SUPABASE_*`-Werte. Falls gesetzt, dasselbe Projekt wie im Frontend verwenden. |
 | `ALLOWED_ORIGINS` | Optional: zusätzliche Browser-Ursprünge, durch Kommas getrennt, mit Protokoll und ohne Pfad. Der eigene Ursprung ist automatisch erlaubt. |
 | `VITE_API_BASE_URL` | Optional: Backend-Ursprung, etwa `https://cloqi.example.com`, ohne `/api`. Im gemeinsamen Vercel-Projekt leer lassen; für spätere getrennte Clients vorgesehen. |
 
-Alle `VITE_`-Variablen werden öffentlich in den Frontend-Build eingebaut. Der OpenAI-Schlüssel darf **niemals** dieses Präfix erhalten. Diese Anwendung braucht keinen Supabase Secret Key und keinen `service_role`-Schlüssel: Sie nutzt den Publishable Key zusammen mit dem Zugriffstoken des angemeldeten Benutzers. Siehe [Supabase API-Schlüssel](https://supabase.com/docs/guides/getting-started/api-keys).
+Alle `VITE_`-Variablen werden öffentlich in den Frontend-Build eingebaut. Die `AI_*`-Werte dürfen **niemals** dieses Präfix erhalten. Diese Anwendung braucht keinen Supabase Secret Key und keinen `service_role`-Schlüssel: Sie nutzt den Publishable Key zusammen mit dem Zugriffstoken des angemeldeten Benutzers. Siehe [Supabase API-Schlüssel](https://supabase.com/docs/guides/getting-started/api-keys).
 
 ## Supabase erstmals einrichten
 
 1. Im [Supabase-Dashboard](https://supabase.com/dashboard) eine Organisation und ein neues Projekt anlegen. Region und Datenbankpasswort wählen, dann auf die Bereitstellung warten. Das Datenbankpasswort ist kein `.env`-Wert.
-2. Im **SQL Editor** die Dateien in `supabase/migrations/` vollständig und in dieser Reihenfolge je einmal ausführen: `202609220001_kloqi_backend.sql` (Arbeitsbereiche, Mitgliedschaften, gespeicherte Zustände, KI-Limits, Berechtigungen), `202609230001_demo_ai_quota.sql` (gemeinsames Demo-Budget), `202611080001_cloqi_rename.sql` (Umbenennung KLOQI → CLOQI). Einzelne Tabellen allein reichen nicht. Bestehende Datenbanken brauchen nur die noch fehlenden Dateien. Details: `supabase/README.md`.
+2. Im **SQL Editor** die Dateien in `supabase/migrations/` vollständig und in dieser Reihenfolge je einmal ausführen: `202609220001_kloqi_backend.sql` (Arbeitsbereiche, Mitgliedschaften, gespeicherte Zustände, KI-Limits, Berechtigungen), `202609230001_demo_ai_quota.sql` (gemeinsames Demo-Budget), `202611080001_cloqi_rename.sql` (Umbenennung KLOQI → CLOQI), `202611180001_ai_queue.sql` (KI-Warteschlange). Einzelne Tabellen allein reichen nicht. Bestehende Datenbanken brauchen nur die noch fehlenden Dateien. Details: `supabase/README.md`.
 3. In den Data-API-Einstellungen `public` exponiert lassen. **`cloqi_private` darf nicht exponiert werden.** Die Migration enthält die nötigen Grants und RLS-Regeln; keine pauschalen Schreibrechte ergänzen.
 4. Im **Connect**-Dialog Projekt-URL und Publishable Key kopieren; alternativ den Schlüssel unter **Settings → API Keys** finden. Die beiden `VITE_SUPABASE_*`-Werte in `.env` setzen.
 5. Unter **Authentication → URL Configuration** zunächst `http://localhost:5173` als **Site URL** setzen. Redirect URLs: `http://localhost:5173/**` und bei Nutzung auch `http://127.0.0.1:5173/**`.
@@ -80,7 +83,7 @@ Diese Einrichtung ist noch ausstehend und wurde nicht automatisch ausgeführt.
 1. Das private Repository [robpauli09-design/cloqi](https://github.com/robpauli09-design/cloqi) verwenden. Es enthält Lockfile, `.env.example`, `vercel.json` und SQL-Migration. Die echte `.env` ist vom Upload ausgeschlossen.
 2. In [Vercel](https://vercel.com/new) das Repository importieren. Repository-Hauptverzeichnis als Root Directory, **Vite** als Framework und Node.js **24.x** verwenden.
 3. `vercel.json` setzt Installation auf `npm ci`, Build auf `npm run build` und Ausgabe auf `dist`. Die Dateien in `api/` werden zusätzlich als Functions bereitgestellt.
-4. Unter **Settings → Environment Variables** mindestens `OPENAI_API_KEY`, `OPENAI_MODEL`, `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY` setzen. Production erhält die Produktionswerte; Preview braucht passende eigene Werte, idealerweise ein Test-Supabase-Projekt. Zusätzliche Server-Aliase sind nicht nötig.
+4. Unter **Settings → Environment Variables** mindestens `AI_BASE_URL`, `AI_MODEL`, `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY` setzen. Production erhält die Produktionswerte; Preview braucht passende eigene Werte, idealerweise ein Test-Supabase-Projekt. Zusätzliche Server-Aliase sind nicht nötig.
 5. `VITE_API_BASE_URL` leer lassen. `ALLOWED_ORIGINS` ist bei gemeinsamer Web-App/API-Domain ebenfalls nicht nötig. Für einen späteren getrennten Client dessen konkrete Origin ergänzen.
 6. Deployment starten und die Supabase-Redirects ergänzen. Nach Änderungen an Build-Variablen neu deployen: `VITE_*` wird beim Build eingebaut.
 7. Anmeldung, Speichern und KI wie unten prüfen. Erst dann ist die Cloud-Anbindung bestätigt.
@@ -108,11 +111,13 @@ Nach der Cloud-Einrichtung prüfen:
 | Anmeldung fehlt | Beide öffentlichen Supabase-Werte setzen; Dev-Server neu starten bzw. neu bauen. |
 | Rücksprung nach Registrierung scheitert | Site URL und Redirect-Liste müssen zur tatsächlich verwendeten Adresse passen. |
 | Arbeitsbereich lädt nicht | Vollständige Migration, übereinstimmende Projektwerte, aktive Data API und gültige Anmeldung. |
-| KI nicht konfiguriert/Modell nicht verfügbar | Serverseitigen OpenAI-Schlüssel, Modellnamen und Modellzugriff prüfen. |
-| KI-Limit erreicht | OpenAI-Projektbudget/-Limits und zusätzliche App-Limits prüfen. |
+| KI nicht konfiguriert/Modell nicht verfügbar | `AI_BASE_URL`, `AI_MODEL` und die Modellliste des KI-Servers prüfen. |
+| KI-Limit erreicht / Zeitüberschreitung | Auslastung des KI-Servers und die App-Limits prüfen. |
 | Änderung kollidiert mit anderem Tab | Aktuellen Serverstand laden, dann die Änderung erneut vornehmen. Alte Zustände werden nicht blind überschrieben. |
 
-Cloud-KI-Limits: **20 Anfragen pro UTC-Minute und 200 pro UTC-Tag je Benutzer**, serverinstanzübergreifend durch Supabase. Auch nachgelagert fehlgeschlagene Aufrufe verbrauchen eine Reservierung. Diese Limits ersetzen kein OpenAI-Projektbudget. Weitere Details und Testgrenzen: `supabase/README.md`.
+KI-Warteschlange: Der eigene KI-Server beantwortet eine Anfrage nach der anderen. Jede KI-Anfrage holt sich deshalb zuerst einen Platz in einer gemeinsamen Warteschlange in Supabase (`/api/ai-queue`), die Oberfläche zeigt die Position an, und erst wer an der Reihe ist, darf `/api/ai` bzw. `/api/demo-ai` einmal aufrufen. Der Beitritt verbraucht das jeweilige Kontingent. Höchstens 30 Plätze; wer 30 Sekunden nicht nachfragt oder seinen Zug nicht innerhalb von 20 Sekunden antritt, verliert den Platz. Gleichzeitige KI-Aufrufe und Länge stehen in `cloqi_private.ai_queue_slots()` und `ai_queue_capacity()` und werden per Migration geändert.
+
+Cloud-KI-Limits: **20 Anfragen pro UTC-Minute und 200 pro UTC-Tag je Benutzer**, serverinstanzübergreifend durch Supabase. Auch nachgelagert fehlgeschlagene Aufrufe verbrauchen eine Reservierung. Sie schützen auch den eigenen KI-Server vor Überlastung. Weitere Details und Testgrenzen: `supabase/README.md`.
 
 ## Codeaufbau
 
@@ -136,7 +141,7 @@ Oberfläche, API und Datenbank bleiben getrennt. Dies sind **eigene grobe Entwic
 
 Offizielle Grundlagen: [PWA](https://web.dev/learn/pwa/), [Capacitor](https://capacitorjs.com/docs), [Tauri mit Vite](https://v2.tauri.app/start/frontend/), [Expo und DOM-Komponenten](https://docs.expo.dev/workflow/web/).
 
-Native Clients brauchen zusätzlich Login-Deep-Links, Sitzungsspeicherung, Signierung, Store-Einrichtung und Gerätetests. iOS-Builds benötigen macOS/Xcode oder einen Cloud-Build-Dienst. Push und Offline-Synchronisierung sind eigene Funktionen: Eine App-Hülle macht Supabase-Zugriffe oder serverseitige KI nicht automatisch offlinefähig. Der OpenAI-Schlüssel bleibt immer im Backend; getrennte Clients nutzen eine konfigurierte API-Adresse.
+Native Clients brauchen zusätzlich Login-Deep-Links, Sitzungsspeicherung, Signierung, Store-Einrichtung und Gerätetests. iOS-Builds benötigen macOS/Xcode oder einen Cloud-Build-Dienst. Push und Offline-Synchronisierung sind eigene Funktionen: Eine App-Hülle macht Supabase-Zugriffe oder serverseitige KI nicht automatisch offlinefähig. Der Zugang zum KI-Server bleibt immer im Backend; getrennte Clients nutzen eine konfigurierte API-Adresse.
 
 ## Bildquellen
 

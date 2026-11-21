@@ -8,6 +8,7 @@ import { allowedPages, initialTasksFor, pagePath, resolvePage } from "./auth/use
 import { RoleViews } from "./roles/RoleViews";
 import {ImportFlow,ImportLibrary} from './imports/ImportFlow';
 import { DemoBudgetNotice } from './backend/DemoBudgetNotice';
+import { AIQueueNotice } from './backend/AIQueueNotice';
 import type { WorkspaceState, AIResult } from "../shared/contracts";
 import {
   Home,
@@ -1042,6 +1043,7 @@ export default function App() {
           </div>
         </Modal>
       )}
+      <AIQueueNotice />
       {toast && (
         <div className="toast" role="status">
           <span>

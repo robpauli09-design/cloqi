@@ -139,7 +139,7 @@ function AIConnectionNote({ go }: { go: (page: Page) => void }) {
       <CircleHelp size={18} />
       <p>
         {aiMode === "signin-required"
-          ? "Melde dich an, um CLOQI mit OpenAI zu nutzen."
+          ? "Melde dich an, um die CLOQI KI zu nutzen."
           : "Die KI-Verbindung ist noch nicht bereit. Prüfe die Einrichtung und den Verbindungsstatus in den Einstellungen."}
       </p>
       <button className="button secondary" onClick={() => go("settings")}>
@@ -420,7 +420,7 @@ function Processes({
                 </span>
                 <h2>{result.analysis?.title || "Deine Prozessanalyse"}</h2>
               </div>
-              <span className="demo-badge">OpenAI · {result.model}</span>
+              <span className="demo-badge">CLOQI KI · {result.model}</span>
             </div>
             <p className="ai-generated-text">{result.text}</p>
             {result.analysis && (
@@ -1402,7 +1402,7 @@ function Knowledge({
                   </p>
                   <small>
                     {summaryResult
-                      ? `OpenAI · ${summaryResult.model} · Zusammenfassung eines Beispielartikels`
+                      ? `CLOQI KI · ${summaryResult.model} · Zusammenfassung eines Beispielartikels`
                       : "Vorbereitete Demo-Zusammenfassung"}
                   </small>
                 </div>
@@ -1501,7 +1501,7 @@ function Assistant({
           id: Date.now() + 1,
           role: "assistant",
           text: result.text,
-          source: `OpenAI · ${result.model}`,
+          source: `CLOQI KI · ${result.model}`,
         },
       ]);
     } catch (error) {
@@ -1547,7 +1547,7 @@ function Assistant({
             </span>
             <span className="demo-badge">
               {aiMode === "live"
-                ? "Mit OpenAI verbunden"
+                ? "Mit CLOQI KI verbunden"
                 : aiMode === "demo"
                   ? "Simulierter Assistent"
                   : "Verbindung einrichten"}
@@ -1653,7 +1653,7 @@ function Assistant({
           </form>
           <p className="chat-disclaimer">
             {aiMode === "live"
-              ? "OpenAI erhält deine Nachrichten sowie Aufgaben und Prozesskontext aus den Beispieldaten. KI-Antworten können Fehler enthalten."
+              ? "Der CLOQI-KI-Server erhält deine Nachrichten sowie Aufgaben und Prozesskontext aus den Beispieldaten. KI-Antworten können Fehler enthalten."
               : aiMode === "demo"
                 ? "Lokale Demo mit vorbereiteten Antworten. Keine echte KI-Verbindung."
                 : "Für echte KI-Antworten richte die Verbindung in den Einstellungen ein."}
@@ -1839,7 +1839,7 @@ function SettingsPage({
               className="text-action"
               onClick={() =>
                 toast(
-                  "CLOQI · React, TypeScript, OpenAI und Supabase · Produktionsdaten sind Beispiele.",
+                  "CLOQI · React, TypeScript, eigener KI-Server und Supabase · Produktionsdaten sind Beispiele.",
                 )
               }
             >

@@ -1,17 +1,14 @@
 import { z } from "zod";
 import { aiRequestSchema, workspaceSchema } from "../shared/contracts";
 import type { BackendStatus } from "../shared/contracts";
-import { hasSupabase } from "./config";
+import { hasAI, hasSupabase } from "./config";
 import type { ServerConfig } from "./config";
 import { HttpError } from "./errors";
-import { generateAI } from "./openai";
-import {
-  authenticate,
-  claimQuota,
-  claimDemoQuota,
-  loadWorkspace,
-  saveWorkspace,
-} from "./supabase";
+import { generateAI } from "./ai";
+import { authenticate, loadWorkspace, saveWorkspace } from "./supabase";
+import type { AuthContext } from "./supabase";
+import { memoryQueue, supabaseQueue } from "./queue";
+import type { AIQueue } from "./queue";
 
 export const AI_BODY_LIMIT = 64 * 1024;
 export const WORKSPACE_BODY_LIMIT = 600 * 1024;
@@ -26,8 +23,8 @@ const saveRequestSchema = z
 
 interface Dependencies {
   authenticate: typeof authenticate;
-  claimQuota: typeof claimQuota;
-  claimDemoQuota: typeof claimDemoQuota;
+  /** Queue in front of the AI server; null config selects the local fallback. */
+  queue?: (config: ServerConfig) => AIQueue;
   generateAI: typeof generateAI;
   loadWorkspace: typeof loadWorkspace;
   saveWorkspace: typeof saveWorkspace;
@@ -93,8 +90,8 @@ function checkOrigin(request: Request, config: ServerConfig, headers: Headers) {
     );
   }
   headers.set("Access-Control-Allow-Origin", origin);
-  headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS");
-  headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+  headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type, X-AI-Ticket");
   headers.set("Access-Control-Max-Age", "600");
 }
 
@@ -169,14 +166,13 @@ const methods: Record<string, string[]> = {
   "/api/status": ["GET"],
   "/api/ai": ["POST"],
   "/api/demo-ai": ["POST"],
+  "/api/ai-queue": ["GET", "POST", "DELETE"],
   "/api/workspace": ["GET", "PUT"],
 };
 
 export function createHandler(overrides: Partial<Dependencies> = {}) {
   const dependencies: Dependencies = {
     authenticate,
-    claimQuota,
-    claimDemoQuota,
     generateAI,
     loadWorkspace,
     saveWorkspace,
@@ -184,6 +180,12 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
     ...overrides,
   };
   const claimLocalQuota = localQuota(dependencies.now);
+  // Production always uses the Supabase queue shared by every instance; the
+  // in-memory one only serves the single-process loopback development server.
+  const localQueue = memoryQueue(claimLocalQuota, dependencies.now);
+  const queueFor = (config: ServerConfig) =>
+    dependencies.queue?.(config) ??
+    (hasSupabase(config) ? supabaseQueue(config) : localQueue);
   return async function handle(
     request: Request,
     config: ServerConfig,
@@ -225,7 +227,7 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
           .filter(Boolean);
         if (
           requestedHeaders.some(
-            (header) => !["authorization", "content-type"].includes(header),
+            (header) => !["authorization", "content-type", "x-ai-ticket"].includes(header),
           )
         ) {
           throw new HttpError(
@@ -245,17 +247,20 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
       }
       if (path === "/api/status") {
         const status: BackendStatus = {
-          demoAiEnabled: Boolean(config.demoAiEnabled && config.openaiKey && hasSupabase(config)),
-          aiConfigured: Boolean(config.openaiKey),
+          demoAiEnabled: Boolean(config.demoAiEnabled && hasAI(config) && hasSupabase(config)),
+          aiConfigured: hasAI(config),
           authConfigured: hasSupabase(config),
           authRequired: !config.localDevelopment || hasSupabase(config),
           mode: config.localDevelopment ? "local" : "cloud",
-          model: config.openaiKey ? config.model : null,
+          model: hasAI(config) ? config.model : null,
         };
         return json(status);
       }
-      if (path === "/api/ai" || path === "/api/demo-ai") {
-        const demo = path === "/api/demo-ai";
+      if (path === "/api/ai" || path === "/api/demo-ai" || path === "/api/ai-queue") {
+        const url = new URL(request.url);
+        const demo =
+          path === "/api/demo-ai" ||
+          (path === "/api/ai-queue" && url.searchParams.get("mode") === "demo");
         if (demo && !config.demoAiEnabled) throw new HttpError(403,"demo_disabled","Die echte Demo-KI ist noch nicht freigeschaltet.");
         if (!config.localDevelopment && !hasSupabase(config)) {
           throw new HttpError(
@@ -264,12 +269,37 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
             "Für den Online-Betrieb muss Supabase zuerst konfiguriert werden.",
           );
         }
-        if (!config.openaiKey) {
+        if (!hasAI(config)) {
           throw new HttpError(
             503,
-            "openai_missing",
-            "Der OpenAI-Schlüssel fehlt. Bitte OPENAI_API_KEY auf dem Server hinterlegen.",
+            "ai_missing",
+            "Der KI-Server ist nicht konfiguriert. Bitte AI_BASE_URL und AI_MODEL auf dem Server hinterlegen.",
           );
+        }
+        const auth: AuthContext | null =
+          !demo && hasSupabase(config)
+            ? await dependencies.authenticate(request, config)
+            : null;
+        const queue = queueFor(config);
+        if (path === "/api/ai-queue" && request.method === "POST") {
+          // Joining spends the quota (personal or shared demo budget).
+          const joined = await queue.join(auth);
+          const turn = await queue.poll(joined.ticket, auth);
+          return json({
+            ticket: joined.ticket,
+            ...turn,
+            ...(joined.demoRemaining === undefined ? {} : { demoRemaining: joined.demoRemaining }),
+          });
+        }
+        const ticket = request.headers.get("x-ai-ticket") || "";
+        if (!z.uuid().safeParse(ticket).success)
+          throw new HttpError(400, "ai_ticket_missing", "Die KI-Anfrage braucht einen gültigen Platz in der Warteschlange.");
+        if (path === "/api/ai-queue") {
+          if (request.method === "DELETE") {
+            await queue.leave(ticket, auth);
+            return json({ left: true });
+          }
+          return json(await queue.poll(ticket, auth));
         }
         const parsed = aiRequestSchema.safeParse(
           await readJson(request, AI_BODY_LIMIT),
@@ -280,16 +310,14 @@ export function createHandler(overrides: Partial<Dependencies> = {}) {
             "invalid_ai_request",
             "Die KI-Anfrage enthält ungültige oder zu viele Daten.",
           );
-        let demoRemaining: number | undefined;
-        if (demo) {
-          demoRemaining = await dependencies.claimDemoQuota(config);
-        } else if (hasSupabase(config)) {
-          const auth = await dependencies.authenticate(request, config);
-          await dependencies.claimQuota(auth);
-        } else {
-          claimLocalQuota();
+        // One granted ticket buys exactly one AI call.
+        if (!(await queue.begin(ticket, auth)))
+          throw new HttpError(409, "ai_queue_not_ready", "Du bist in der KI-Warteschlange noch nicht an der Reihe.");
+        try {
+          return json(await dependencies.generateAI(parsed.data, config));
+        } finally {
+          await queue.leave(ticket, auth).catch(() => {});
         }
-        return json({...await dependencies.generateAI(parsed.data, config), ...(demoRemaining === undefined ? {} : {demoRemaining})});
       }
       const auth = await dependencies.authenticate(request, config);
       if (request.method === "GET")

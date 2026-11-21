@@ -75,6 +75,7 @@ before(async () => {
     "202609220001_kloqi_backend.sql",
     "202609230001_demo_ai_quota.sql",
     "202611080001_cloqi_rename.sql",
+    "202611180001_ai_queue.sql",
   ]) {
     await db.exec(
       await readFile(
@@ -464,5 +465,120 @@ describe("shared public demo budget", { concurrency: false }, () => {
       "select day_count from cloqi_private.demo_ai_budget",
     );
     assert.equal(counter.rows[0].day_count, 1);
+  });
+});
+
+const queueUser = "00000000-0000-4000-8000-000000000005";
+const queueOther = "00000000-0000-4000-8000-000000000006";
+type Turn = { queue_position: number; ready: boolean };
+const queueCall = <T>(
+  userId: string | null,
+  sql: string,
+  params: unknown[] = [],
+  role: "authenticated" | "anon" = userId ? "authenticated" : "anon",
+) => asUser(userId, async (tx) => (await tx.query<T>(sql, params)).rows, role);
+const joinDemo = async () =>
+  (await queueCall<{ ticket: string; remaining: number }>(null, "select * from public.join_demo_ai_queue()"))[0];
+const joinUser = async (userId: string) =>
+  (await queueCall<{ ticket: string }>(userId, "select public.join_ai_queue() as ticket"))[0].ticket;
+const poll = async (ticket: string, userId: string | null = null) =>
+  (await queueCall<Turn>(userId, "select * from public.poll_ai_queue($1::uuid)", [ticket]))[0];
+const begin = async (ticket: string, userId: string | null = null) =>
+  (await queueCall<{ ok: boolean }>(userId, "select public.begin_ai_queue_turn($1::uuid) as ok", [ticket]))[0].ok;
+const leave = (ticket: string, userId: string | null = null) =>
+  queueCall(userId, "select public.leave_ai_queue($1::uuid)", [ticket]);
+
+describe("AI queue", { concurrency: false }, () => {
+  before(async () => {
+    for (const id of [queueUser, queueOther])
+      await db.query("insert into auth.users(id) values ($1) on conflict do nothing", [id]);
+  });
+  const reset = async () => {
+    await db.exec("delete from cloqi_private.ai_queue");
+    await db.exec("delete from cloqi_private.demo_ai_budget");
+    await db.exec("delete from cloqi_private.ai_usage");
+  };
+
+  it("serves strictly in arrival order, one turn at a time", async () => {
+    await reset();
+    const a = await joinUser(queueUser);
+    const b = (await joinDemo()).ticket;
+    const c = await joinUser(queueOther);
+    assert.deepEqual(await poll(a, queueUser), { queue_position: 0, ready: true });
+    assert.deepEqual(await poll(c, queueOther), { queue_position: 2, ready: false });
+    assert.deepEqual(await poll(b), { queue_position: 1, ready: false });
+    assert.equal(await begin(b), false, "a waiting ticket cannot start");
+    assert.equal(await begin(a, queueUser), true);
+    assert.equal(await begin(a, queueUser), false, "one ticket buys one answer");
+    await leave(a, queueUser);
+    assert.deepEqual(await poll(c, queueOther), { queue_position: 2, ready: false }, "b still waits ahead of c");
+    assert.deepEqual(await poll(b), { queue_position: 0, ready: true });
+    assert.deepEqual(await poll(c, queueOther), { queue_position: 1, ready: false });
+  });
+
+  it("joining spends the existing quotas", async () => {
+    await reset();
+    assert.equal((await joinDemo()).remaining, 49);
+    await joinDemo();
+    await joinDemo();
+    await assert.rejects(joinDemo(), (e: Error) => e.message.includes("demo_rate_limit"));
+    const usage = await db.query<{ minute_count: number }>(
+      "select minute_count from cloqi_private.ai_usage where user_id = $1",
+      [queueUser],
+    );
+    assert.equal(usage.rows.length, 0);
+    await joinUser(queueUser);
+    const after = await db.query<{ minute_count: number }>(
+      "select minute_count from cloqi_private.ai_usage where user_id = $1",
+      [queueUser],
+    );
+    assert.equal(after.rows[0].minute_count, 1);
+  });
+
+  it("refuses a full queue before any quota is spent", async () => {
+    await reset();
+    await db.exec(`insert into cloqi_private.ai_queue (user_id)
+      select null from generate_series(1, 30)`);
+    await assert.rejects(joinDemo(), (e: Error) => e.message.includes("ai_queue_full"));
+    const budget = await db.query("select * from cloqi_private.demo_ai_budget");
+    assert.equal(budget.rows.length, 0);
+  });
+
+  it("drops abandoned tickets so nobody blocks the line", async () => {
+    await reset();
+    const gone = (await joinDemo()).ticket;
+    const stuck = (await joinDemo()).ticket;
+    const next = (await joinDemo()).ticket;
+    await db.query(
+      "update cloqi_private.ai_queue set last_seen = now() - interval '31 seconds' where id = $1",
+      [gone],
+    );
+    assert.deepEqual(await poll(stuck), { queue_position: 0, ready: true });
+    await db.query(
+      "update cloqi_private.ai_queue set granted_at = now() - interval '21 seconds' where id = $1",
+      [stuck],
+    );
+    assert.deepEqual(await poll(next), { queue_position: 0, ready: true });
+    await assert.rejects(poll(gone), (e: Error) => e.message.includes("ai_ticket_unknown"));
+  });
+
+  it("binds signed-in tickets to their owner and hides the table", async () => {
+    await reset();
+    const mine = await joinUser(queueUser);
+    await assert.rejects(poll(mine, queueOther), (e: Error) => e.message.includes("ai_ticket_unknown"));
+    await assert.rejects(poll(mine), (e: Error) => e.message.includes("ai_ticket_unknown"));
+    assert.equal(await begin(mine, queueOther), false);
+    await leave(mine, queueOther);
+    assert.deepEqual(await poll(mine, queueUser), { queue_position: 0, ready: true });
+    for (const sql of [
+      "select * from cloqi_private.ai_queue",
+      "delete from cloqi_private.ai_queue",
+      "select cloqi_private.ai_queue_insert(null)",
+    ])
+      await assert.rejects(asUser(null, (tx) => tx.exec(sql), "anon"), { code: "42501" });
+    await assert.rejects(
+      asUser(null, (tx) => tx.exec("select public.join_ai_queue()"), "anon"),
+      { code: "42501" },
+    );
   });
 });

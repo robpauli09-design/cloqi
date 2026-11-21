@@ -1354,6 +1354,11 @@ strong {
   color: var(--deep);
   flex-shrink: 0;
 }
+/* Sits above an ordinary toast so both stay readable. */
+.toast.ai-queue-notice {
+  bottom: 86px;
+  border-color: #e3d7a8;
+}
 .toast > button {
   margin-left: 12px;
   color: var(--muted);

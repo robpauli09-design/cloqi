@@ -510,7 +510,7 @@ export function ImportFlow({
             <ShieldCheck size={22} />
             <p>
               <strong>Du behältst die Kontrolle.</strong> Erst nach deiner
-              Prüfung wird gespeichert. Deine Dateien werden weder an OpenAI
+              Prüfung wird gespeichert. Deine Dateien werden weder an den KI-Server
               noch an einen Server gesendet.
             </p>
           </div>

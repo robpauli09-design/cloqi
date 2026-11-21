@@ -1,6 +1,16 @@
 export interface ServerConfig {
-  openaiKey: string;
+  /** OpenAI-compatible endpoint of the CLOQI AI server, e.g. http://host:8086/v1 */
+  aiBaseUrl: string;
+  /** Optional bearer token; empty when the AI server has no API key set. */
+  aiKey: string;
   model: string;
+  aiTimeoutMs: number;
+  /**
+   * "chat": OpenAI-compatible /chat/completions (default).
+   * "chatml": CLOQI renders the Qwen ChatML prompt itself and calls /completions.
+   * Needed for LocalAI builds whose chat endpoints drop the model output.
+   */
+  aiPromptFormat: "chat" | "chatml";
   supabaseUrl: string;
   supabaseKey: string;
   allowedOrigins: string[];
@@ -11,10 +21,15 @@ export function readConfig(
   env: NodeJS.ProcessEnv = process.env,
   localDevelopment = false,
 ): ServerConfig {
-  const model = env.OPENAI_MODEL?.trim() || "gpt-5-mini";
+  const timeout = Number(env.AI_TIMEOUT_MS);
   return {
-    openaiKey: env.OPENAI_API_KEY?.trim() || "",
-    model,
+    aiBaseUrl: (env.AI_BASE_URL?.trim() || "").replace(/\/+$/, ""),
+    aiKey: env.AI_API_KEY?.trim() || "",
+    model: env.AI_MODEL?.trim() || "",
+    // Self-hosted models answer far slower than hosted APIs; stay below
+    // the 180 s Vercel function limit in vercel.json.
+    aiTimeoutMs: Number.isFinite(timeout) && timeout > 0 ? Math.min(timeout, 170_000) : 150_000,
+    aiPromptFormat: env.AI_PROMPT_FORMAT?.trim().toLowerCase() === "chatml" ? "chatml" : "chat",
     supabaseUrl:
       env.SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim() || "",
     supabaseKey:
@@ -28,6 +43,9 @@ export function readConfig(
     localDevelopment,
     demoAiEnabled: env.DEMO_AI_ENABLED === "true",
   };
+}
+export function hasAI(c: ServerConfig) {
+  return Boolean(c.aiBaseUrl && c.model);
 }
 export function hasSupabase(c: ServerConfig) {
   return Boolean(c.supabaseUrl && c.supabaseKey);
