@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, BookOpenText, CalendarDays, Flower2, Home, Link2, LogOut, MessageCircleHeart, Sun, UserRound } from 'lucide-react';
-import { logout } from '@/app/actions/auth';
+import { BookOpen, BookOpenText, CalendarDays, Flower2, Home, Link2, MessageCircleHeart, Sun, UserRound } from 'lucide-react';
+import { AccountMenu } from './AccountMenu';
 import { Logo } from './Logo';
 import { Mascot, type MascotName } from './Mascot';
 
@@ -18,8 +18,10 @@ const NAV = [
 ];
 const CYCLE = { href: '/cycle', label: 'Cycle', icon: Flower2 };
 
+/** Desktop: the profile lives in the account menu at the bottom left, not in the list. */
 function useItems(cycle: boolean) {
-  return cycle ? [...NAV.slice(0, 6), CYCLE, NAV[6]] : NAV;
+  const main = NAV.filter(i => i.href !== '/profile');
+  return cycle ? [...main, CYCLE] : main;
 }
 
 export function Sidebar({ name, email, mascot, cycle }: { name: string; email: string; mascot: MascotName; cycle: boolean }) {
@@ -50,16 +52,7 @@ export function Sidebar({ name, email, mascot, cycle }: { name: string; email: s
           <Mascot name={mascot} variant="bust" size={72} className="absolute -bottom-3 -right-2 opacity-95" />
           <p className="max-w-[110px] text-xs font-medium leading-snug text-paper/85">Ich halte deinen Tag im Blick.</p>
         </div>
-        <div className="flex items-center gap-2 rounded-xl px-2 py-2">
-          <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-lime font-display font-bold text-leaf-deep">{name.slice(0, 1).toUpperCase()}</div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{name}</p>
-            <p className="truncate text-xs text-paper/60">{email}</p>
-          </div>
-          <form action={logout}>
-            <button className="rounded-lg p-2 text-paper/60 hover:bg-white/10 hover:text-paper" aria-label="Abmelden" title="Abmelden"><LogOut size={16} /></button>
-          </form>
-        </div>
+        <AccountMenu name={name} email={email} />
       </div>
     </aside>
   );

@@ -19,7 +19,7 @@ export function ProfileForm({ name, userType, gender, timezone, mascot }: { name
   const [g, setG] = useState<Gender | null>(gender);
   const shown = mascotFor(g, m);
   return (
-    <form action={action} className="card card-pad space-y-4">
+    <form id="profil" action={action} className="card card-pad scroll-mt-6 space-y-4">
       <h2 className="h2">Profil</h2>
       <div><label className="label" htmlFor="p-name">Name</label><input id="p-name" name="name" required maxLength={40} defaultValue={name} className="input" /></div>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -71,7 +71,7 @@ export function ProfileForm({ name, userType, gender, timezone, mascot }: { name
 export function PrefsForm({ prefs }: { prefs: Prefs }) {
   const [state, action] = useActionState(savePrefs, null);
   return (
-    <form action={action} className="card card-pad space-y-4">
+    <form id="lernzeiten" action={action} className="card card-pad scroll-mt-6 space-y-4">
       <h2 className="h2">Lernpräferenzen</h2>
       <p className="muted -mt-2">CLOQI plant Lernblöcke nur innerhalb dieser Zeiten.</p>
       <div className="grid grid-cols-2 gap-3">
@@ -98,7 +98,7 @@ export function SubjectsForm({ subjects }: { subjects: Subject[] }) {
   const [state, action] = useActionState(addSubject, null);
   const [pending, start] = useTransition();
   return (
-    <section className="card card-pad space-y-4">
+    <section id="faecher" className="card card-pad scroll-mt-6 space-y-4">
       <h2 className="h2">Fächer</h2>
       <p className="muted -mt-2">Die Schwierigkeit bestimmt, wie viel Lernzeit CLOQI für Tests einplant.</p>
       <div className="flex flex-wrap gap-2">
@@ -124,7 +124,7 @@ export function NotificationSettings() {
   const [perm, setPerm] = useState<string>('default');
   useEffect(() => { setPerm(typeof Notification === 'undefined' ? 'unsupported' : Notification.permission); }, []);
   return (
-    <section className="card card-pad space-y-3">
+    <section id="benachrichtigungen" className="card card-pad scroll-mt-6 space-y-3">
       <h2 className="h2">Erinnerungen</h2>
       <p className="muted">Solange CLOQI geöffnet ist, erinnert dich Cloki in der App. Mit Browser-Benachrichtigungen bekommst du sie auch, wenn der Tab im Hintergrund ist. Push-Nachrichten bei geschlossener App kommen mit den Handy-Apps.</p>
       {perm === 'granted' ? <p className="chip bg-leaf-soft text-leaf-dark"><Bell size={13} /> Browser-Benachrichtigungen aktiv</p>
@@ -139,7 +139,7 @@ export function CycleSettings({ enabled, inCalendar }: { enabled: boolean; inCal
   const [pending, start] = useTransition();
   const [consent, setConsent] = useState(false);
   return (
-    <section className="card card-pad space-y-3">
+    <section id="cycle" className="card card-pad scroll-mt-6 space-y-3">
       <div className="flex items-center gap-3">
         <Mascot name="clea" variant="head" size={44} />
         <h2 className="h2 flex-1">Cycle (optional)</h2>
@@ -176,7 +176,7 @@ export function CycleSettings({ enabled, inCalendar }: { enabled: boolean; inCal
 export function DangerZone() {
   const [state, action] = useActionState(deleteAccount, null);
   return (
-    <section className="card card-pad space-y-4">
+    <section id="konto" className="card card-pad scroll-mt-6 space-y-4">
       <h2 className="h2 flex items-center gap-2"><ShieldCheck size={20} className="text-leaf" /> Datenschutz & Account</h2>
       <ul className="space-y-1 text-sm text-ink-soft">
         <li>• Daten werden in der EU gespeichert, Tokens und Feed-Links verschlüsselt (AES-256).</li>
