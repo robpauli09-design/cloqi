@@ -32,6 +32,7 @@ Lokal: `npm install`, `.env.local` aus `.env.example` anlegen (gleiche Werte, `A
 | `AI_API_KEY` | für CLOQI AI | Schlüssel des Sprachmodell-Anbieters |
 | `AI_MODEL` | für CLOQI AI | Modellname, z. B. ein Modell mit Tool-Calling deines Anbieters |
 | `AI_BASE_URL` | optional | Standard `https://api.openai.com/v1`; für EU-Anbieter deren OpenAI-kompatible Basis-URL |
+| `AI_REASONING_EFFORT` | optional | z. B. `none` / `low`. Nur für Denk-Modelle nötig; leer lassen. Lehnt ein Modell Werkzeuge ohne `none` ab (z. B. GPT-6 Sol), setzt CLOQI `none` automatisch |
 | `CRON_SECRET` | empfohlen | beliebiger langer Zufallswert; Vercel Cron sendet ihn automatisch |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | Google Kalender (Redirect `{APP_URL}/api/integrations/google/callback`) |
 | `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT` | optional | Outlook (Redirect `{APP_URL}/api/integrations/outlook/callback`) |

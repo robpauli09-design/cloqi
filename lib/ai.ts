@@ -14,11 +14,17 @@ import { aiCanWrite, ensureVault, normalizePath, readVault, readVaultFile } from
 // CLOQI AI: a tool-using agent on any OpenAI-compatible chat API
 // (OpenAI, DeepSeek at an EU host, Mistral, …). Configure AI_BASE_URL, AI_API_KEY, AI_MODEL.
 
+/** Env values pasted into a dashboard often carry spaces or quotes – strip them. */
+const clean = (v: string | undefined) => v?.trim().replace(/^["']|["']$/g, '').trim() || undefined;
+
 export function aiConfig() {
-  const key = process.env.AI_API_KEY || process.env.OPENAI_API_KEY;
-  const model = process.env.AI_MODEL;
+  const key = clean(process.env.AI_API_KEY) || clean(process.env.OPENAI_API_KEY);
+  const model = clean(process.env.AI_MODEL);
   if (!key || !model) return null;
-  return { key, model, base: (process.env.AI_BASE_URL || 'https://api.openai.com/v1').replace(/\/$/, '') };
+  return {
+    key, model, base: (clean(process.env.AI_BASE_URL) || 'https://api.openai.com/v1').replace(/\/+$/, ''),
+    effort: clean(process.env.AI_REASONING_EFFORT),
+  };
 }
 
 type Json = Record<string, unknown>;
@@ -326,7 +332,13 @@ ${week.join('\n') || '- nichts eingetragen'}`;
 
 interface ChatMsg { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]; tool_call_id?: string }
 
+// Some reasoning models (e.g. OpenAI GPT-6 Sol) only allow function tools on /chat/completions with
+// reasoning_effort "none". Other providers don't know the parameter at all, so it is only sent when
+// AI_REASONING_EFFORT is set, or after the provider asked for it once (remembered per model).
+const effortFor = new Map<string, string>();
+
 async function complete(cfg: NonNullable<ReturnType<typeof aiConfig>>, messages: ChatMsg[]): Promise<ChatMsg> {
+  const effort = cfg.effort ?? effortFor.get(cfg.model);
   const res = await fetch(`${cfg.base}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.key}` },
@@ -335,6 +347,7 @@ async function complete(cfg: NonNullable<ReturnType<typeof aiConfig>>, messages:
       model: cfg.model, messages,
       tools: TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
       tool_choice: 'auto',
+      ...(effort ? { reasoning_effort: effort } : {}),
     }),
   });
   if (!res.ok) {
@@ -342,7 +355,20 @@ async function complete(cfg: NonNullable<ReturnType<typeof aiConfig>>, messages:
     if (res.status === 401) throw new Error('Der KI-Schlüssel (AI_API_KEY) wurde abgelehnt.');
     if (res.status === 404) throw new Error(`Das KI-Modell „${cfg.model}“ wurde nicht gefunden (AI_MODEL prüfen).`);
     if (res.status === 429) throw new Error('Das KI-Kontingent ist gerade ausgeschöpft. Bitte später erneut versuchen.');
+    let err: { message?: unknown; code?: unknown; param?: unknown } | undefined;
+    try { err = (JSON.parse(body) as { error?: typeof err }).error; } catch { /* not JSON */ }
+    if (res.status === 400 && err?.param === 'reasoning_effort' && effort !== 'none' && !cfg.effort) {
+      effortFor.set(cfg.model, 'none');
+      return complete(cfg, messages); // retry once with reasoning_effort "none"
+    }
     console.error(`[cloqi] KI-Anfrage fehlgeschlagen (${res.status}):`, body.slice(0, 500));
+    if (res.status === 400) {
+      // A 400 is a configuration problem (model name, unsupported parameter), not an outage.
+      // Show only the provider's short client-facing reason – never the raw body.
+      const reason = [typeof err?.code === 'string' ? err.code : '', typeof err?.message === 'string' ? err.message : '']
+        .filter(Boolean).join(': ').replace(/sk-[A-Za-z0-9_-]{6,}/g, '[key]').slice(0, 220);
+      throw new Error(`Die KI-Anfrage wurde abgelehnt – bitte AI_MODEL (aktuell „${cfg.model}“) prüfen.${reason ? ` Grund: ${reason}` : ''}`);
+    }
     throw new Error(`Der KI-Dienst ist gerade nicht erreichbar (Fehler ${res.status}). Bitte später erneut versuchen.`);
   }
   const data = await res.json() as { choices?: { message: ChatMsg }[] };
