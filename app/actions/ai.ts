@@ -2,24 +2,45 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth';
-import { chatFor, type ChatReply } from '@/lib/ai';
-import { clearChat, deleteVaultFile, getVaultFile, writeVaultFile } from '@/lib/repo';
+import { chatFor, transcribe, type ChatReply } from '@/lib/ai';
+import { deleteThread, deleteVaultFile, getThread, getVaultFile, listChat, listThreads, writeVaultFile, type ChatThread } from '@/lib/repo';
 import { normalizePath, readVaultFile, userCanDelete, userCanWrite } from '@/lib/vault';
 import type { ActionResult } from '@/lib/validate';
 
-/** Sends one message to CLOQI AI (tool-using agent). */
-export async function chatWithCloqi(message: string): Promise<ChatReply> {
+/** Sends one message to CLOQI AI (tool-using agent). threadId null = new conversation. */
+export async function chatWithCloqi(message: string, threadId: string | null = null, attachments: unknown = []): Promise<ChatReply> {
   const user = await requireUser();
-  const r = await chatFor(user, message);
+  const r = await chatFor(user, message, { threadId, attachments });
   if (r.actions.length) revalidatePath('/', 'layout');
   return r;
 }
 
-export async function clearChatAction(): Promise<ActionResult> {
+/** Voice input: recorded audio (FormData field "audio") → text. */
+export async function transcribeAction(form: FormData): Promise<{ ok: boolean; text?: string; error?: string }> {
+  await requireUser();
+  const file = form.get('audio');
+  if (!(file instanceof Blob) || !file.size) return { ok: false, error: 'Keine Aufnahme erhalten.' };
+  if (file.size > 4 * 1024 * 1024) return { ok: false, error: 'Die Aufnahme ist zu lang.' };
+  const name = file instanceof File && /\.(m4a|mp4|webm|wav|mp3|ogg)$/i.test(file.name) ? file.name : 'aufnahme.webm';
+  try { return { ok: true, text: await transcribe(file, name) }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Spracherkennung fehlgeschlagen.' }; }
+}
+
+/** Chat history: the user's conversations, newest first. */
+export async function listThreadsAction(): Promise<ChatThread[]> {
   const user = await requireUser();
-  await clearChat(user.id);
-  revalidatePath('/ai');
-  return { ok: true, message: 'Chat geleert. Dein Vault bleibt erhalten – CLOQI kennt dich weiterhin.' };
+  return listThreads(user.id);
+}
+
+export async function openThreadAction(id: string): Promise<{ ok: boolean; messages: { id: string; role: 'user' | 'assistant'; content: string }[] }> {
+  const user = await requireUser();
+  if (!(await getThread(user.id, String(id)))) return { ok: false, messages: [] };
+  return { ok: true, messages: (await listChat(user.id, String(id), 200)).map(m => ({ id: m.id, role: m.role, content: m.content })) };
+}
+
+export async function deleteThreadAction(id: string): Promise<ActionResult> {
+  const user = await requireUser();
+  await deleteThread(user.id, String(id));
+  return { ok: true, message: 'Chat gelöscht. Was CLOQI über dich weiß (Wissen), bleibt erhalten.' };
 }
 
 // ---------- vault ----------

@@ -35,6 +35,18 @@ function wrap(sql: PgSql): Db {
 /** Keep in sync with supabase/schema.sql – only ADD … IF NOT EXISTS style statements here. */
 const UPGRADES = [
   "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender text CHECK (gender IN ('m', 'w', 'd'))",
+  // chat history (conversations)
+  `CREATE TABLE IF NOT EXISTS chat_threads (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     title text NOT NULL DEFAULT 'Neuer Chat' CHECK (length(title) BETWEEN 1 AND 80),
+     created_at timestamptz NOT NULL DEFAULT now(),
+     updated_at timestamptz NOT NULL DEFAULT now())`,
+  'CREATE INDEX IF NOT EXISTS chat_threads_user_idx ON chat_threads (user_id, updated_at DESC)',
+  'ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS thread_id uuid REFERENCES chat_threads(id) ON DELETE CASCADE',
+  'CREATE INDEX IF NOT EXISTS chat_thread_idx ON chat_messages (thread_id, created_at)',
+  'ALTER TABLE chat_threads ENABLE ROW LEVEL SECURITY',
+  "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.chat_threads FROM anon, authenticated; END IF; END $$",
 ];
 
 const isoInstant =(x: string) => new Date(x.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00')).toISOString();

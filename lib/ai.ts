@@ -2,7 +2,7 @@ import 'server-only';
 import { busyIntervals, dayRange, getCalendarItems, mainCalendarId } from './calendar';
 import { applyPlan, proposePlan } from './planning';
 import {
-  addChat, createEvent, deleteEvent, getBlock, getCalendar, getEvent, getVaultFile, listChat, listTasks, logAiAction,
+  addChat, createEvent, createThread, deleteEvent, getBlock, getCalendar, getEvent, getThread, getVaultFile, listChat, listTasks, logAiAction,
   searchVault, updateBlock, updateEvent, updateUser, writeVaultFile,
 } from './repo';
 import { freeSlots } from './scheduler';
@@ -21,10 +21,11 @@ export function aiConfig() {
   const key = clean(process.env.AI_API_KEY) || clean(process.env.OPENAI_API_KEY);
   const model = clean(process.env.AI_MODEL);
   if (!key || !model) return null;
-  return {
-    key, model, base: (clean(process.env.AI_BASE_URL) || 'https://api.openai.com/v1').replace(/\/+$/, ''),
-    effort: clean(process.env.AI_REASONING_EFFORT),
-  };
+  const base = (clean(process.env.AI_BASE_URL) || 'https://api.openai.com/v1').replace(/\/+$/, '');
+  // OpenAI itself: Responses API (thinking + tools). Everyone else: Chat Completions. Override with AI_API_STYLE.
+  const forced = clean(process.env.AI_API_STYLE);
+  const style: 'responses' | 'chat' = forced === 'responses' || forced === 'chat' ? forced : /^https:\/\/api\.openai\.com\//.test(base) ? 'responses' : 'chat';
+  return { key, model, base, style, effort: clean(process.env.AI_REASONING_EFFORT) };
 }
 
 type Json = Record<string, unknown>;
@@ -330,19 +331,119 @@ ${tasks.map(t => `- ${utcToZoned(t.dueAt, tz).date}: ${quoted(t.title)}`).join('
 ${week.join('\n') || '- nichts eingetragen'}`;
 }
 
-interface ChatMsg { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | null; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]; tool_call_id?: string }
+// ---------------------------------------------------------------------------------------------
+// Two ways to talk to the model (chosen by aiConfig().style):
+//  • "responses" – OpenAI Responses API (/v1/responses). Thinking (reasoning) AND tools together.
+//    Stateless (store: false): nothing is kept at OpenAI; reasoning items of a turn are replayed.
+//  • "chat"      – /v1/chat/completions, which every OpenAI-compatible provider (EU hosts,
+//    Mistral, DeepSeek …) understands. Some reasoning models need reasoning_effort "none" there.
+// ---------------------------------------------------------------------------------------------
+
+/** A photo or document sent along with a chat message (base64, not stored by CLOQI). */
+export interface Attachment { name: string; mime: string; data: string }
+export const ATTACHMENT_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'];
+const MAX_ATTACHMENTS = 4;
+const MAX_ATTACHMENT_CHARS = 4_000_000; // all attachments together (base64), fits the request limit
+
+type Cfg = NonNullable<ReturnType<typeof aiConfig>>;
+type ErrBody = { message?: unknown; code?: unknown; param?: unknown };
+
+async function providerError(cfg: Cfg, res: Response, body: string): Promise<never> {
+  if (res.status === 401) throw new Error('Der KI-Schlüssel (AI_API_KEY) wurde abgelehnt.');
+  if (res.status === 404) throw new Error(`Das KI-Modell „${cfg.model}“ wurde nicht gefunden (AI_MODEL prüfen).`);
+  if (res.status === 429) throw new Error('Das KI-Kontingent ist gerade ausgeschöpft. Bitte später erneut versuchen.');
+  console.error(`[cloqi] KI-Anfrage fehlgeschlagen (${res.status}):`, body.slice(0, 500));
+  if (res.status === 400) {
+    // A 400 is a configuration problem (model name, unsupported parameter), not an outage.
+    // Show only the provider's short client-facing reason – never the raw body.
+    let err: ErrBody | undefined;
+    try { err = (JSON.parse(body) as { error?: ErrBody }).error; } catch { /* not JSON */ }
+    const reason = [typeof err?.code === 'string' ? err.code : '', typeof err?.message === 'string' ? err.message : '']
+      .filter(Boolean).join(': ').replace(/sk-[A-Za-z0-9_-]{6,}/g, '[key]').slice(0, 220);
+    throw new Error(`Die KI-Anfrage wurde abgelehnt – bitte AI_MODEL (aktuell „${cfg.model}“) prüfen.${reason ? ` Grund: ${reason}` : ''}`);
+  }
+  throw new Error(`Der KI-Dienst ist gerade nicht erreichbar (Fehler ${res.status}). Bitte später erneut versuchen.`);
+}
+
+/** Runs one tool call and returns its JSON result as text (errors become a result, not a crash). */
+async function runTool(user: User, name: string, rawArgs: string, ctx: Ctx): Promise<string> {
+  const tool = TOOLS.find(t => t.name === name);
+  let result: unknown;
+  try {
+    if (!tool) throw new Error(`Unbekanntes Werkzeug ${name}`);
+    result = await tool.run(user, JSON.parse(rawArgs || '{}') as Json, ctx);
+  } catch (e) {
+    result = { error: e instanceof Error ? e.message : 'Fehler' };
+  }
+  return JSON.stringify(result).slice(0, 30000);
+}
+
+const dataUrl = (a: Attachment) => `data:${a.mime};base64,${a.data}`;
+
+// ---------- Responses API ----------
+
+type RItem = Record<string, unknown> & { type?: string };
+
+async function viaResponses(cfg: Cfg, user: User, system: string, history: { role: 'user' | 'assistant'; content: string }[], text: string, files: Attachment[], ctx: Ctx): Promise<string> {
+  const input: RItem[] = [
+    ...history.map(m => ({ role: m.role, content: m.content })),
+    {
+      role: 'user',
+      content: [
+        { type: 'input_text', text },
+        ...files.map(f => f.mime === 'application/pdf'
+          ? { type: 'input_file', filename: f.name, file_data: dataUrl(f) }
+          : { type: 'input_image', image_url: dataUrl(f) }),
+      ],
+    },
+  ];
+  const tools = TOOLS.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters, strict: false }));
+  for (let step = 0; step < 8; step++) {
+    const res = await fetch(`${cfg.base}/responses`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.key}` },
+      signal: AbortSignal.timeout(110000),
+      body: JSON.stringify({
+        model: cfg.model, instructions: system, input, tools, store: false,
+        reasoning: { effort: cfg.effort || 'medium' },
+      }),
+    });
+    const body = await res.text().catch(() => '');
+    if (!res.ok) await providerError(cfg, res, body);
+    const data = JSON.parse(body) as { output?: RItem[]; status?: string };
+    const output = data.output ?? [];
+    input.push(...output); // replay everything (incl. reasoning) – required for thinking + tools without storage
+    const calls = output.filter(o => o.type === 'function_call') as (RItem & { call_id: string; name: string; arguments: string })[];
+    if (!calls.length) {
+      const reply = output.filter(o => o.type === 'message')
+        .flatMap(o => (o.content as { type: string; text?: string }[] | undefined) ?? [])
+        .filter(c => c.type === 'output_text').map(c => c.text ?? '').join('\n').trim();
+      if (!reply && data.status === 'incomplete') return 'Das war zu viel auf einmal – frag mich bitte etwas kürzer.';
+      return reply;
+    }
+    for (const call of calls) {
+      input.push({ type: 'function_call_output', call_id: call.call_id, output: await runTool(user, call.name, call.arguments, ctx) });
+    }
+  }
+  return '';
+}
+
+// ---------- Chat Completions ----------
+
+type ChatPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
+interface ChatMsg { role: 'system' | 'user' | 'assistant' | 'tool'; content: string | ChatPart[] | null; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[]; tool_call_id?: string }
 
 // Some reasoning models (e.g. OpenAI GPT-6 Sol) only allow function tools on /chat/completions with
 // reasoning_effort "none". Other providers don't know the parameter at all, so it is only sent when
 // AI_REASONING_EFFORT is set, or after the provider asked for it once (remembered per model).
 const effortFor = new Map<string, string>();
 
-async function complete(cfg: NonNullable<ReturnType<typeof aiConfig>>, messages: ChatMsg[]): Promise<ChatMsg> {
+async function complete(cfg: Cfg, messages: ChatMsg[]): Promise<ChatMsg> {
   const effort = cfg.effort ?? effortFor.get(cfg.model);
   const res = await fetch(`${cfg.base}/chat/completions`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.key}` },
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(90000),
     body: JSON.stringify({
       model: cfg.model, messages,
       tools: TOOLS.map(t => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.parameters } })),
@@ -352,24 +453,13 @@ async function complete(cfg: NonNullable<ReturnType<typeof aiConfig>>, messages:
   });
   if (!res.ok) {
     const body = await res.text().catch(() => '');
-    if (res.status === 401) throw new Error('Der KI-Schlüssel (AI_API_KEY) wurde abgelehnt.');
-    if (res.status === 404) throw new Error(`Das KI-Modell „${cfg.model}“ wurde nicht gefunden (AI_MODEL prüfen).`);
-    if (res.status === 429) throw new Error('Das KI-Kontingent ist gerade ausgeschöpft. Bitte später erneut versuchen.');
-    let err: { message?: unknown; code?: unknown; param?: unknown } | undefined;
-    try { err = (JSON.parse(body) as { error?: typeof err }).error; } catch { /* not JSON */ }
+    let err: ErrBody | undefined;
+    try { err = (JSON.parse(body) as { error?: ErrBody }).error; } catch { /* not JSON */ }
     if (res.status === 400 && err?.param === 'reasoning_effort' && effort !== 'none' && !cfg.effort) {
       effortFor.set(cfg.model, 'none');
       return complete(cfg, messages); // retry once with reasoning_effort "none"
     }
-    console.error(`[cloqi] KI-Anfrage fehlgeschlagen (${res.status}):`, body.slice(0, 500));
-    if (res.status === 400) {
-      // A 400 is a configuration problem (model name, unsupported parameter), not an outage.
-      // Show only the provider's short client-facing reason – never the raw body.
-      const reason = [typeof err?.code === 'string' ? err.code : '', typeof err?.message === 'string' ? err.message : '']
-        .filter(Boolean).join(': ').replace(/sk-[A-Za-z0-9_-]{6,}/g, '[key]').slice(0, 220);
-      throw new Error(`Die KI-Anfrage wurde abgelehnt – bitte AI_MODEL (aktuell „${cfg.model}“) prüfen.${reason ? ` Grund: ${reason}` : ''}`);
-    }
-    throw new Error(`Der KI-Dienst ist gerade nicht erreichbar (Fehler ${res.status}). Bitte später erneut versuchen.`);
+    await providerError(cfg, res, body);
   }
   const data = await res.json() as { choices?: { message: ChatMsg }[] };
   const msg = data.choices?.[0]?.message;
@@ -377,60 +467,108 @@ async function complete(cfg: NonNullable<ReturnType<typeof aiConfig>>, messages:
   return msg;
 }
 
-export interface AgentResult { reply: string; actions: string[] }
-
-/** One user turn: loads history + vault context, lets the model use tools, stores both messages. */
-export async function runAgent(user: User, message: string): Promise<AgentResult> {
-  const cfg = aiConfig();
-  if (!cfg) throw new Error('KI ist nicht eingerichtet.');
-  await ensureVault(user);
-  const history = (await listChat(user.id, 16)).map<ChatMsg>(m => ({ role: m.role, content: m.content }));
-  const messages: ChatMsg[] = [{ role: 'system', content: await systemPrompt(user) }, ...history, { role: 'user', content: message }];
-  const ctx: Ctx = { actions: [], userMessage: message };
-  await addChat(user.id, 'user', message);
-
-  let reply = '';
+async function viaChat(cfg: Cfg, user: User, system: string, history: { role: 'user' | 'assistant'; content: string }[], text: string, files: Attachment[], ctx: Ctx): Promise<string> {
+  if (files.some(f => f.mime === 'application/pdf')) throw new Error('PDFs kann dieses KI-Modell nicht lesen – schick mir bitte ein Foto davon.');
+  const messages: ChatMsg[] = [
+    { role: 'system', content: system },
+    ...history.map<ChatMsg>(m => ({ role: m.role, content: m.content })),
+    { role: 'user', content: files.length ? [{ type: 'text', text }, ...files.map<ChatPart>(f => ({ type: 'image_url', image_url: { url: dataUrl(f) } }))] : text },
+  ];
   for (let step = 0; step < 8; step++) {
     const msg = await complete(cfg, messages);
     messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls });
-    if (!msg.tool_calls?.length) { reply = msg.content ?? ''; break; }
+    if (!msg.tool_calls?.length) return typeof msg.content === 'string' ? msg.content : '';
     for (const call of msg.tool_calls) {
-      const tool = TOOLS.find(t => t.name === call.function.name);
-      let result: unknown;
-      try {
-        if (!tool) throw new Error(`Unbekanntes Werkzeug ${call.function.name}`);
-        const args = JSON.parse(call.function.arguments || '{}') as Json;
-        result = await tool.run(user, args, ctx);
-      } catch (e) {
-        result = { error: e instanceof Error ? e.message : 'Fehler' };
-      }
-      messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result).slice(0, 30000) });
+      messages.push({ role: 'tool', tool_call_id: call.id, content: await runTool(user, call.function.name, call.function.arguments, ctx) });
     }
   }
+  return '';
+}
+
+// ---------- one turn ----------
+
+export interface AgentResult { reply: string; actions: string[]; threadId: string }
+
+/** One user turn in a conversation (new conversation when threadId is null). */
+export async function runAgent(user: User, message: string, opts: { threadId?: string | null; attachments?: Attachment[] } = {}): Promise<AgentResult> {
+  const cfg = aiConfig();
+  if (!cfg) throw new Error('KI ist nicht eingerichtet.');
+  await ensureVault(user);
+  const files = opts.attachments ?? [];
+  const existing = opts.threadId ?? null;
+  if (existing && !(await getThread(user.id, existing))) throw new Error('Dieser Chat existiert nicht mehr.');
+  const history = existing ? (await listChat(user.id, existing, 16)).map(m => ({ role: m.role, content: m.content })) : [];
+  const threadId = existing ?? await createThread(user.id, message.replace(/\s+/g, ' ').slice(0, 60) || (files.length ? 'Anhang' : 'Neuer Chat'));
+
+  const system = await systemPrompt(user);
+  const ctx: Ctx = { actions: [], userMessage: message };
+  const text = message || 'Was siehst du auf dem Anhang? Trag ein, was für meinen Kalender wichtig ist.';
+  await addChat(user.id, threadId, 'user', files.length ? `${message}${message ? '\n' : ''}📎 ${files.map(f => f.name).join(', ')}` : message);
+
+  let reply = cfg.style === 'responses'
+    ? await viaResponses(cfg, user, system, history, text, files, ctx)
+    : await viaChat(cfg, user, system, history, text, files, ctx);
   if (!reply) reply = ctx.actions.length ? 'Erledigt!' : 'Das habe ich leider nicht geschafft. Versuch es bitte anders formuliert.';
-  await addChat(user.id, 'assistant', reply);
-  return { reply, actions: ctx.actions };
+  await addChat(user.id, threadId, 'assistant', reply);
+  return { reply, actions: ctx.actions, threadId };
 }
 
 export { readVault };
 
-export interface ChatReply { ok: boolean; reply: string; actions: string[] }
+export interface ChatReply { ok: boolean; reply: string; actions: string[]; threadId: string | null }
 
 const lastCall = new Map<string, number>();
 
+/** Checks attachments sent by the website/app (type, count, size). */
+export function cleanAttachments(raw: unknown): Attachment[] {
+  if (!Array.isArray(raw)) return [];
+  if (raw.length > MAX_ATTACHMENTS) throw new Error(`Höchstens ${MAX_ATTACHMENTS} Anhänge pro Nachricht.`);
+  const out = raw.map(a => {
+    const x = (a ?? {}) as Record<string, unknown>;
+    const mime = String(x.mime ?? '');
+    const data = String(x.data ?? '').replace(/^data:[^,]*,/, '');
+    if (!ATTACHMENT_TYPES.includes(mime)) throw new Error('Nur Fotos (JPG, PNG, WebP) und PDFs werden unterstützt.');
+    if (!/^[A-Za-z0-9+/=]+$/.test(data)) throw new Error('Anhang ist beschädigt.');
+    return { name: String(x.name ?? 'Anhang').replace(/[^\p{L}\p{N} ._()-]/gu, '').slice(0, 80) || 'Anhang', mime, data };
+  });
+  if (out.reduce((n, a) => n + a.data.length, 0) > MAX_ATTACHMENT_CHARS) throw new Error('Die Anhänge sind zu groß (zusammen max. ca. 3 MB).');
+  return out;
+}
+
 /** One chat turn for a user – used by the website and the app. */
-export async function chatFor(user: User, message: string): Promise<ChatReply> {
+export async function chatFor(user: User, message: string, opts: { threadId?: string | null; attachments?: unknown } = {}): Promise<ChatReply> {
+  const threadId = opts.threadId ?? null;
   const text = String(message ?? '').trim().slice(0, 2000);
-  if (!text) return { ok: false, reply: 'Schreib mir etwas 🙂', actions: [] };
-  if (!aiConfig()) return { ok: false, reply: 'CLOQI AI ist auf diesem Server noch nicht eingerichtet (AI_API_KEY und AI_MODEL fehlen).', actions: [] };
+  let files: Attachment[];
+  try { files = cleanAttachments(opts.attachments); } catch (e) { return { ok: false, reply: (e as Error).message, actions: [], threadId }; }
+  if (!text && !files.length) return { ok: false, reply: 'Schreib mir etwas 🙂', actions: [], threadId };
+  if (!aiConfig()) return { ok: false, reply: 'CLOQI AI ist auf diesem Server noch nicht eingerichtet (AI_API_KEY und AI_MODEL fehlen).', actions: [], threadId };
   // simple per-user throttle against accidental loops / cost spikes
   const now = Date.now();
-  if (now - (lastCall.get(user.id) ?? 0) < 1500) return { ok: false, reply: 'Einen Moment bitte – ich bin noch beim letzten Schritt.', actions: [] };
+  if (now - (lastCall.get(user.id) ?? 0) < 1500) return { ok: false, reply: 'Einen Moment bitte – ich bin noch beim letzten Schritt.', actions: [], threadId };
   lastCall.set(user.id, now);
   try {
-    const r = await runAgent(user, text);
-    return { ok: true, reply: r.reply, actions: r.actions };
+    const r = await runAgent(user, text, { threadId, attachments: files });
+    return { ok: true, reply: r.reply, actions: r.actions, threadId: r.threadId };
   } catch (e) {
-    return { ok: false, reply: e instanceof Error ? e.message : 'Da ist etwas schiefgelaufen.', actions: [] };
+    return { ok: false, reply: e instanceof Error ? e.message : 'Da ist etwas schiefgelaufen.', actions: [], threadId };
   }
+}
+
+/** Speech → text for the app (OpenAI-compatible /audio/transcriptions). */
+export async function transcribe(audio: Blob, filename: string): Promise<string> {
+  const cfg = aiConfig();
+  if (!cfg) throw new Error('KI ist nicht eingerichtet.');
+  const form = new FormData();
+  form.set('model', process.env.AI_TRANSCRIBE_MODEL?.trim() || 'gpt-transcribe');
+  form.set('file', audio, filename);
+  form.append('languages[]', 'de');
+  const res = await fetch(`${cfg.base}/audio/transcriptions`, {
+    method: 'POST', headers: { Authorization: `Bearer ${cfg.key}` }, body: form, signal: AbortSignal.timeout(60000),
+  });
+  const body = await res.text().catch(() => '');
+  if (!res.ok) await providerError(cfg, res, body);
+  const text = (JSON.parse(body) as { text?: string }).text?.trim() ?? '';
+  if (!text) throw new Error('Ich habe nichts verstanden – versuch es nochmal.');
+  return text;
 }

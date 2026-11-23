@@ -629,17 +629,50 @@ export async function listAiActions(userId: string, limit = 100): Promise<{ tool
 
 export interface ChatMessage { id: string; role: 'user' | 'assistant'; content: string; createdAt: string }
 
-export async function listChat(userId: string, limit = 40): Promise<ChatMessage[]> {
-  const rows = await all('SELECT id, role, content, created_at FROM chat_messages WHERE user_id = ? ORDER BY created_at DESC LIMIT ?', [userId, limit]);
+export interface ChatThread { id: string; title: string; updatedAt: string }
+
+/** Messages from before chat history existed (thread_id NULL) become one "Früherer Chat". */
+async function adoptLegacyChat(userId: string) {
+  const legacy = await get('SELECT count(*)::int AS n, min(created_at) AS first, max(created_at) AS last FROM chat_messages WHERE user_id = ? AND thread_id IS NULL', [userId]);
+  if (!legacy || !Number(legacy.n)) return;
+  const id = newId();
+  await (await db()).tx(async q => {
+    await q.run('INSERT INTO chat_threads (id, user_id, title, created_at, updated_at) VALUES (?, ?, ?, ?, ?)', [id, userId, 'Früherer Chat', String(legacy.first), String(legacy.last)]);
+    await q.run('UPDATE chat_messages SET thread_id = ? WHERE user_id = ? AND thread_id IS NULL', [id, userId]);
+  });
+}
+
+export async function listThreads(userId: string, limit = 60): Promise<ChatThread[]> {
+  await adoptLegacyChat(userId);
+  return (await all('SELECT id, title, updated_at FROM chat_threads WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?', [userId, limit]))
+    .map(r => ({ id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at) }));
+}
+
+export async function getThread(userId: string, id: string): Promise<ChatThread | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) return null;
+  const r = await get('SELECT id, title, updated_at FROM chat_threads WHERE id = ? AND user_id = ?', [id, userId]);
+  return r ? { id: String(r.id), title: String(r.title), updatedAt: String(r.updated_at) } : null;
+}
+
+export async function createThread(userId: string, title: string): Promise<string> {
+  const id = newId();
+  await run('INSERT INTO chat_threads (id, user_id, title) VALUES (?, ?, ?)', [id, userId, title.trim().slice(0, 80) || 'Neuer Chat']);
+  return id;
+}
+
+export async function deleteThread(userId: string, id: string) {
+  await run('DELETE FROM chat_threads WHERE id = ? AND user_id = ?', [id, userId]); // messages cascade
+}
+
+/** Last `limit` messages of a conversation, oldest first. */
+export async function listChat(userId: string, threadId: string, limit = 60): Promise<ChatMessage[]> {
+  const rows = await all('SELECT id, role, content, created_at FROM chat_messages WHERE user_id = ? AND thread_id = ? ORDER BY created_at DESC LIMIT ?', [userId, threadId, limit]);
   return rows.reverse().map(r => ({ id: String(r.id), role: String(r.role) as ChatMessage['role'], content: String(r.content), createdAt: String(r.created_at) }));
 }
 
-export async function addChat(userId: string, role: ChatMessage['role'], content: string) {
-  await run('INSERT INTO chat_messages (user_id, role, content) VALUES (?, ?, ?)', [userId, role, content.slice(0, 8000)]);
-}
-
-export async function clearChat(userId: string) {
-  await run('DELETE FROM chat_messages WHERE user_id = ?', [userId]);
+export async function addChat(userId: string, threadId: string, role: ChatMessage['role'], content: string) {
+  await run('INSERT INTO chat_messages (user_id, thread_id, role, content) VALUES (?, ?, ?, ?)', [userId, threadId, role, content.slice(0, 8000)]);
+  await run('UPDATE chat_threads SET updated_at = now() WHERE id = ? AND user_id = ?', [threadId, userId]);
 }
 
 // =====================================================================
@@ -661,7 +694,8 @@ export async function exportUserData(userId: string) {
     suggestions: await q('SELECT * FROM suggestions WHERE user_id = ?'),
     vault: await q('SELECT path, content, updated_by, updated_at FROM vault_files WHERE user_id = ?'),
     aiActions: await q('SELECT tool, summary, created_at FROM ai_actions WHERE user_id = ?'),
-    chat: await q('SELECT role, content, created_at FROM chat_messages WHERE user_id = ?'),
+    chatThreads: await q('SELECT id, title, created_at FROM chat_threads WHERE user_id = ?'),
+    chat: await q('SELECT thread_id, role, content, created_at FROM chat_messages WHERE user_id = ?'),
     cycleEntries: (await hasCycleConsent(userId)) ? await listCycleEntries(userId) : [],
   };
 }

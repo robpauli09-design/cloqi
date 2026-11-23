@@ -4,7 +4,7 @@
 -- How to install: Supabase project (region EU / Frankfurt) → SQL Editor → paste this file → Run.
 -- Safe to run again: every statement uses IF NOT EXISTS / CREATE OR REPLACE.
 --
--- Design overview (18 tables)
+-- Design overview (19 tables)
 --
 --   ACCOUNT            users ─┬─ profiles (1:1)            who the person is, app settings
 --                             ├─ study_settings (1:1)      when CLOQI may plan study time
@@ -24,7 +24,7 @@
 --                        └─ sync_mappings (CLOQI item ↔ external event id, prevents duplicates)
 --
 --   ASSISTANT          vault_files (Obsidian-like knowledge vault) · ai_actions (change log)
---                      chat_messages · suggestions (proposals the user accepts/declines)
+--                      chat_threads ── chat_messages · suggestions (proposals the user accepts/declines)
 --
 --   HEALTH (optional)  cycle_entries – fully encrypted by the app (GDPR Art. 9)
 --
@@ -304,14 +304,28 @@ CREATE TABLE IF NOT EXISTS ai_actions (
 );
 CREATE INDEX IF NOT EXISTS ai_actions_user_idx ON ai_actions (user_id, created_at DESC);
 
+-- One row per conversation with CLOQI AI (chat history like ChatGPT/Claude).
+CREATE TABLE IF NOT EXISTS chat_threads (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title       text NOT NULL DEFAULT 'Neuer Chat' CHECK (length(title) BETWEEN 1 AND 80),
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS chat_threads_user_idx ON chat_threads (user_id, updated_at DESC);
+
 CREATE TABLE IF NOT EXISTS chat_messages (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  thread_id   uuid REFERENCES chat_threads(id) ON DELETE CASCADE,   -- NULL only for messages from before chat history existed
   role        text NOT NULL CHECK (role IN ('user', 'assistant')),
   content     text NOT NULL CHECK (length(content) <= 8000),
   created_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS chat_user_idx ON chat_messages (user_id, created_at DESC);
+-- upgrade for databases created before chat history existed
+ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS thread_id uuid REFERENCES chat_threads(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS chat_thread_idx ON chat_messages (thread_id, created_at);
 
 -- ---------- HEALTH (optional module) ----------------------------------------------------------
 
@@ -343,7 +357,7 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['users', 'profiles', 'study_settings', 'subjects', 'sessions', 'calendar_connections', 'calendars',
     'events', 'timetable_entries', 'school_holidays', 'tasks', 'study_blocks', 'sync_mappings', 'suggestions', 'vault_files',
-    'ai_actions', 'chat_messages', 'cycle_entries'] LOOP
+    'ai_actions', 'chat_threads', 'chat_messages', 'cycle_entries'] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
       EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);

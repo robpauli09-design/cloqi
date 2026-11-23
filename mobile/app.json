@@ -10,7 +10,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "app.cloqi.mobile",
-      "config": { "usesNonExemptEncryption": false }
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "app.cloqi.mobile",
@@ -31,9 +33,31 @@
       "expo-font",
       [
         "expo-splash-screen",
-        { "image": "./assets/splash-icon.png", "imageWidth": 200, "resizeMode": "contain", "backgroundColor": "#F8F7F2" }
-      ]
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#F8F7F2"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "CLOQI braucht das Mikrofon, damit du Termine und Tests einfach einsprechen kannst."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "CLOQI braucht Zugriff auf deine Fotos, damit du z. B. einen Stundenplan oder Testinfos schicken kannst.",
+          "cameraPermission": "CLOQI braucht die Kamera, damit du z. B. die Tafel oder einen Zettel fotografieren kannst.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-asset"
     ],
-    "experiments": { "typedRoutes": true }
+    "experiments": {
+      "typedRoutes": true
+    }
   }
 }

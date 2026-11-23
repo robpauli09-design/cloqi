@@ -28,9 +28,9 @@ export function withUser(handler: (user: User, req: Request) => Promise<Response
   };
 }
 
-export async function body(req: Request): Promise<Record<string, unknown>> {
+export async function body(req: Request, maxChars = 20000): Promise<Record<string, unknown>> {
   const text = await req.text();
-  if (text.length > 20000) throw new InputError('Anfrage ist zu groß.');
+  if (text.length > maxChars) throw new InputError('Anfrage ist zu groß.');
   try { const v = text ? JSON.parse(text) : {}; return v && typeof v === 'object' ? v : {}; } catch { throw new InputError('Ungültige Anfrage.'); }
 }
 

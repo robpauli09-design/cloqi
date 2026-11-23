@@ -32,7 +32,9 @@ Lokal: `npm install`, `.env.local` aus `.env.example` anlegen (gleiche Werte, `A
 | `AI_API_KEY` | für CLOQI AI | Schlüssel des Sprachmodell-Anbieters |
 | `AI_MODEL` | für CLOQI AI | Modellname, z. B. ein Modell mit Tool-Calling deines Anbieters |
 | `AI_BASE_URL` | optional | Standard `https://api.openai.com/v1`; für EU-Anbieter deren OpenAI-kompatible Basis-URL |
-| `AI_REASONING_EFFORT` | optional | z. B. `none` / `low`. Nur für Denk-Modelle nötig; leer lassen. Lehnt ein Modell Werkzeuge ohne `none` ab (z. B. GPT-6 Sol), setzt CLOQI `none` automatisch |
+| `AI_REASONING_EFFORT` | optional | Wie viel das Modell nachdenkt: `low` / `medium` (Standard) / `high`. Mit OpenAI denkt CLOQI über die Responses-API nach und nutzt trotzdem Werkzeuge |
+| `AI_API_STYLE` | optional | `responses` oder `chat`. Standard: `responses` bei OpenAI, `chat` bei allen anderen (EU-Hoster, Mistral …) |
+| `AI_TRANSCRIBE_MODEL` | optional | Spracheingabe, Standard `gpt-transcribe` |
 | `CRON_SECRET` | empfohlen | beliebiger langer Zufallswert; Vercel Cron sendet ihn automatisch |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | Google Kalender (Redirect `{APP_URL}/api/integrations/google/callback`) |
 | `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT` | optional | Outlook (Redirect `{APP_URL}/api/integrations/outlook/callback`) |
@@ -60,7 +62,7 @@ wiki/           Gehört CLOQI – index.md + Themenseiten              (CLOQI sc
 
 Die Rechte werden **serverseitig** erzwungen, nicht nur per Prompt. Jede KI-Aktion landet in `ai_actions`.
 
-## Datenbank (18 Tabellen)
+## Datenbank (19 Tabellen)
 
 ```
 ACCOUNT    users ─┬─ profiles (1:1) · study_settings (1:1) · subjects (1:n) · sessions (1:n)
@@ -69,7 +71,7 @@ TIMETABLE  timetable_entries · school_holidays
 LEARN      tasks ── study_blocks
 SYNC       calendar_connections ─┬─ calendars (importierte externe Kalender)
                                  └─ sync_mappings (CLOQI-Eintrag ↔ externe Event-ID, keine Duplikate)
-ASSISTANT  vault_files · ai_actions · chat_messages · suggestions
+ASSISTANT  vault_files · ai_actions · chat_threads ── chat_messages · suggestions
 HEALTH     cycle_entries (vollständig verschlüsselt)
 ```
 

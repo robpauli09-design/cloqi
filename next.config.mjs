@@ -10,6 +10,8 @@ const securityHeaders = [
 const nextConfig = {
   poweredByHeader: false,
   serverExternalPackages: [],
+  // photos/PDFs for CLOQI AI travel through server actions (default limit is 1 MB)
+  experimental: { serverActions: { bodySizeLimit: '5mb' } },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
