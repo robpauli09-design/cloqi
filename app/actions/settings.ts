@@ -17,7 +17,7 @@ import {
 } from '@/lib/repo';
 import { freeSlots } from '@/lib/scheduler';
 import { isValidDate, isValidTime, todayIn, utcToZoned } from '@/lib/time';
-import { CATEGORIES, GENDER_LABELS, USER_TYPE_LABELS, type Category, type Gender, type Prefs, type Subject, type User, type UserType } from '@/lib/types';
+import { CATEGORIES, GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Category, type Gender, type Prefs, type Subject, type User, type UserType } from '@/lib/types';
 import { fail, InputError, int, text, time, type ActionResult } from '@/lib/validate';
 import { normalizeWebUntisUrl, syncWebUntis, upsertFeedEvents, fetchCalendar, isWebUntisHost } from '@/lib/webuntis';
 import { ForbiddenError, listPublicClasses, parsePublicLink, studentIsPublic, type UntisClass } from '@/lib/untis-public';
@@ -39,7 +39,7 @@ export async function completeOnboarding(form: FormData) {
   await updateUser(user.id, {
     name, userType: type in USER_TYPE_LABELS ? type : 'sonstiges', lifeAreas: areas, onboarded: true,
     gender: gender in GENDER_LABELS ? gender as Gender : null,
-    prefs: { ...user.prefs, mascot },
+    prefs: { ...user.prefs, mascot: mascotFor(gender in GENDER_LABELS ? gender as Gender : null, mascot) },
   });
   const next = String(form.get('next') ?? '');
   redirect(['/connect', '/connect#webuntis', '/connect#manual', '/connect#import'].includes(next) ? next : '/dashboard?welcome=1');
@@ -53,12 +53,14 @@ export async function saveProfile(_prev: ActionResult | null, form: FormData): P
     const type = String(form.get('userType') ?? '') as UserType;
     const tz = String(form.get('timezone') ?? user.timezone);
     try { new Intl.DateTimeFormat('en', { timeZone: tz }); } catch { throw new InputError('Unbekannte Zeitzone.'); }
+    const g = String(form.get('gender') ?? '');
+    const gender = g in GENDER_LABELS ? g as Gender : user.gender;
     await updateUser(user.id, {
       name: text(form, 'name', { required: true, max: 40, label: 'Name' }),
       userType: type in USER_TYPE_LABELS ? type : user.userType,
-      gender: String(form.get('gender') ?? '') in GENDER_LABELS ? String(form.get('gender')) as Gender : user.gender,
+      gender,
       timezone: tz,
-      prefs: { ...user.prefs, mascot: form.get('mascot') === 'clea' ? 'clea' : 'cloki' },
+      prefs: { ...user.prefs, mascot: mascotFor(gender, form.get('mascot') === 'clea' ? 'clea' : 'cloki') },
     });
     return done('Profil gespeichert.');
   } catch (e) { return fail(e); }

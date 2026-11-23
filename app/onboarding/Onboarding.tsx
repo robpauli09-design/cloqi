@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { ArrowLeft, ArrowRight, Briefcase, CalendarDays, Dumbbell, GraduationCap, Heart, School, Sparkles, UserRound } from 'lucide-react';
 import { completeOnboarding } from '@/app/actions/settings';
 import { Mascot, type MascotName } from '@/components/Mascot';
-import { GENDER_LABELS, type Gender } from '@/lib/types';
+import { mascotFor, type Gender } from '@/lib/types';
+import { GenderPicker } from '@/app/(app)/profile/ProfileForms';
 import { Logo } from '@/components/Logo';
 import { SubmitButton } from '@/components/ui';
 
@@ -43,8 +44,9 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
   const [type, setType] = useState('schueler');
   const [areas, setAreas] = useState<string[]>(['schule', 'training', 'privat']);
   const [next, setNext] = useState('/connect#webuntis');
-  const [mascot, setMascot] = useState<MascotName>('cloki');
+  const [chosen, setMascot] = useState<MascotName>('cloki');
   const [gender, setGender] = useState<Gender | ''>('');
+  const mascot = mascotFor(gender || null, chosen);
   const last = MESSAGES.length - 1;
   const message = step === 0 ? `${MESSAGES[0]} Ich bin ${mascot === 'clea' ? 'Clea' : 'Cloki'}.` : step === 1 && name ? `Hi ${name}! ${MESSAGES[1]}` : MESSAGES[step];
 
@@ -74,14 +76,8 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
               <h1 className="h1">Wie dürfen wir dich nennen?</h1>
               <input autoFocus value={name} onChange={e => setName(e.target.value)} maxLength={40} className="input mt-5 text-base" placeholder="Dein Vorname" aria-label="Vorname" />
               <p className="label mt-6">Geschlecht</p>
-              <div className="grid grid-cols-3 gap-3" role="radiogroup" aria-label="Geschlecht">
-                {(Object.keys(GENDER_LABELS) as Gender[]).map(g => (
-                  <button type="button" key={g} role="radio" aria-checked={gender === g} onClick={() => setGender(g)}
-                    className={`rounded-2xl border-2 px-3 py-2.5 text-sm font-semibold transition ${gender === g ? 'border-leaf bg-leaf-soft text-leaf-dark' : 'border-line hover:border-leaf/50'}`}>
-                    {GENDER_LABELS[g]}
-                  </button>
-                ))}
-              </div>
+              <GenderPicker value={gender} onChange={setGender} />
+              {gender === 'd' && <>
               <p className="label mt-6">Wer soll dich begleiten?</p>
               <div className="grid grid-cols-2 gap-3">
                 {(['cloki', 'clea'] as const).map(m => (
@@ -92,6 +88,7 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
                   </button>
                 ))}
               </div>
+              </>}
             </>
           )}
           {step === 1 && (

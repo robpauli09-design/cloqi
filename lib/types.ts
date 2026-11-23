@@ -2,6 +2,9 @@ export type UserType = 'schueler' | 'student' | 'lehrer' | 'berufstaetig' | 'son
 
 export type Gender = 'm' | 'w' | 'd';
 export const GENDER_LABELS: Record<Gender, string> = { m: 'Männlich', w: 'Weiblich', d: 'Divers' };
+/** The companion follows the gender: Cloki for m, Clea for w; with d (or not set) the user chooses. */
+export const mascotFor = (gender: Gender | null | undefined, chosen: 'cloki' | 'clea'): 'cloki' | 'clea' =>
+  gender === 'm' ? 'cloki' : gender === 'w' ? 'clea' : chosen;
 /** The Cycle module is offered to female and diverse users (and to anyone who already uses it). */
 export const cycleAvailable = (u: { gender: Gender | null; prefs: { cycleEnabled: boolean } }) => u.gender !== 'm' || u.prefs.cycleEnabled;
 

@@ -10,7 +10,10 @@ const display = Fredoka({ subsets: ['latin'], variable: '--font-display', weight
 export const metadata: Metadata = {
   title: { default: 'CLOQI – Your day. Your flow.', template: '%s · CLOQI' },
   description: 'CLOQI ist dein Kalender, der mitdenkt: Stundenplan, Termine, Lernzeiten und Freizeit an einem Ort – automatisch organisiert.',
-  icons: { icon: '/mascot/cloki-head.png', apple: '/mascot/cloki-head.png' },
+  icons: {
+    icon: [{ url: '/favicon.ico', sizes: 'any' }, { url: '/icon-192.png', type: 'image/png', sizes: '192x192' }, { url: '/icon-512.png', type: 'image/png', sizes: '512x512' }],
+    apple: '/apple-touch-icon.png',
+  },
 };
 
 export const viewport: Viewport = { themeColor: '#19451F', width: 'device-width', initialScale: 1 };

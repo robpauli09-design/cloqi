@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Bell, Download, LogOut, ShieldCheck, Trash2, X } from 'lucide-react';
 import { logout } from '@/app/actions/auth';
 import { addSubject, deleteAccount, removeSubject, saveProfile, savePrefs, setCycleInCalendar, setCycleModule } from '@/app/actions/settings';
-import { GENDER_LABELS, USER_TYPE_LABELS, type Gender, type Prefs, type Subject, type UserType } from '@/lib/types';
+import { GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Gender, type Prefs, type Subject, type UserType } from '@/lib/types';
 import { Mascot, type MascotName } from '@/components/Mascot';
 import { toastResult } from '@/components/Toaster';
 import { FormMessage, SubmitButton, Toggle } from '@/components/ui';
@@ -15,6 +15,8 @@ const ZONES = ['Europe/Vienna', 'Europe/Berlin', 'Europe/Zurich', 'Europe/Rome',
 export function ProfileForm({ name, userType, gender, timezone, mascot }: { name: string; userType: UserType | null; gender: Gender | null; timezone: string; mascot: MascotName }) {
   const [state, action] = useActionState(saveProfile, null);
   const [m, setM] = useState(mascot);
+  const [g, setG] = useState<Gender | null>(gender);
+  const shown = mascotFor(g, m);
   return (
     <form action={action} className="card card-pad space-y-4">
       <h2 className="h2">Profil</h2>
@@ -27,13 +29,6 @@ export function ProfileForm({ name, userType, gender, timezone, mascot }: { name
           </select>
         </div>
         <div>
-          <label className="label" htmlFor="p-gender">Geschlecht</label>
-          <select id="p-gender" name="gender" defaultValue={gender ?? ''} className="input">
-            <option value="" disabled>Bitte wählen</option>
-            {(Object.keys(GENDER_LABELS) as Gender[]).map(g => <option key={g} value={g}>{GENDER_LABELS[g]}</option>)}
-          </select>
-        </div>
-        <div>
           <label className="label" htmlFor="p-tz">Zeitzone</label>
           <select id="p-tz" name="timezone" defaultValue={timezone} className="input">
             {[...new Set([timezone, ...ZONES])].map(z => <option key={z} value={z}>{z}</option>)}
@@ -41,16 +36,28 @@ export function ProfileForm({ name, userType, gender, timezone, mascot }: { name
         </div>
       </div>
       <fieldset>
-        <legend className="label">Maskottchen</legend>
-        <input type="hidden" name="mascot" value={m} />
-        <div className="grid grid-cols-2 gap-3">
-          {(['cloki', 'clea'] as const).map(x => (
-            <button key={x} type="button" onClick={() => setM(x)} aria-pressed={m === x}
-              className={`flex items-center gap-3 rounded-2xl border-2 p-3 ${m === x ? 'border-leaf bg-leaf-soft' : 'border-line'}`}>
-              <Mascot name={x} variant="head" size={44} /><span className="font-semibold">{x === 'cloki' ? 'Cloki' : 'Clea'}</span>
-            </button>
-          ))}
-        </div>
+        <legend className="label">Geschlecht</legend>
+        <input type="hidden" name="gender" value={g ?? ''} />
+        <GenderPicker value={g} onChange={setG} />
+      </fieldset>
+      <fieldset>
+        <legend className="label">Dein Begleiter</legend>
+        <input type="hidden" name="mascot" value={shown} />
+        {g === 'd' || !g ? (
+          <div className="grid grid-cols-2 gap-3">
+            {(['cloki', 'clea'] as const).map(x => (
+              <button key={x} type="button" onClick={() => setM(x)} aria-pressed={shown === x}
+                className={`flex items-center gap-3 rounded-2xl border-2 p-3 transition ${shown === x ? 'border-leaf bg-leaf-soft' : 'border-line hover:border-leaf/50'}`}>
+                <Mascot name={x} variant="head" size={44} /><span className="font-semibold">{x === 'cloki' ? 'Cloki' : 'Clea'}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex items-center gap-3 rounded-2xl border-2 border-leaf bg-leaf-soft p-3">
+            <Mascot name={shown} variant="head" size={44} />
+            <span><span className="block font-semibold">{shown === 'clea' ? 'Clea' : 'Cloki'}</span><span className="block text-xs text-ink-soft">begleitet dich durch CLOQI</span></span>
+          </div>
+        )}
       </fieldset>
       <FormMessage state={state} />
       <SubmitButton>Speichern</SubmitButton>
@@ -187,5 +194,19 @@ export function DangerZone() {
         </form>
       </details>
     </section>
+  );
+}
+
+/** Segmented m/w/d control – same look in onboarding and profile. */
+export function GenderPicker({ value, onChange }: { value: Gender | null | ''; onChange: (g: Gender) => void }) {
+  return (
+    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-paper p-1" role="radiogroup" aria-label="Geschlecht">
+      {(Object.keys(GENDER_LABELS) as Gender[]).map(x => (
+        <button type="button" key={x} role="radio" aria-checked={value === x} onClick={() => onChange(x)}
+          className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${value === x ? 'bg-white text-leaf-dark shadow-sm ring-2 ring-leaf' : 'text-ink-soft hover:bg-white/70 hover:text-ink'}`}>
+          {GENDER_LABELS[x]}
+        </button>
+      ))}
+    </div>
   );
 }

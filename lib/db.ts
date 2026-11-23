@@ -32,7 +32,12 @@ function wrap(sql: PgSql): Db {
   };
 }
 
-const isoInstant = (x: string) => new Date(x.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00')).toISOString();
+/** Keep in sync with supabase/schema.sql – only ADD … IF NOT EXISTS style statements here. */
+const UPGRADES = [
+  "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender text CHECK (gender IN ('m', 'w', 'd'))",
+];
+
+const isoInstant =(x: string) => new Date(x.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00')).toISOString();
 
 async function open(): Promise<Db> {
   const url = process.env.DATABASE_URL;
@@ -60,6 +65,10 @@ async function open(): Promise<Db> {
   const db = wrap(sql);
   const ok = await db.get("SELECT to_regclass('public.vault_files') AS t");
   if (!ok?.t) throw new Error('Die Datenbank ist noch nicht eingerichtet: bitte supabase/schema.sql im Supabase SQL Editor ausführen.');
+  // Small additive upgrades for databases created with an older schema.sql (idempotent, never drop data).
+  for (const stmt of UPGRADES) {
+    try { await db.run(stmt); } catch (e) { console.error('[cloqi] Datenbank-Upgrade fehlgeschlagen:', stmt, e); }
+  }
   return db;
 }
 
