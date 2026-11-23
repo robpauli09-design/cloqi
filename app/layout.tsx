@@ -21,7 +21,7 @@ export const viewport: Viewport = { themeColor: '#19451F', width: 'device-width'
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="de" className={`${body.variable} ${display.variable}`}>
-      <body className="min-h-screen font-sans">{children}</body>
+      <body className="min-h-dvh font-sans">{children}</body>
     </html>
   );
 }

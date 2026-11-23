@@ -52,3 +52,15 @@ export const shadow = {
   shadowOffset: { width: 0, height: 6 },
   elevation: 3,
 };
+
+/** Calendar highlights – same rule as the website (lib/types.ts itemMark). */
+export type ItemMark = 'exam' | 'cancelled' | null;
+export function itemMark(i: { category: string; status: string }): ItemMark {
+  if (i.status === 'cancelled') return 'cancelled';
+  if (i.category === 'pruefung' && i.status !== 'done') return 'exam';
+  return null;
+}
+export const MARK_STYLE = {
+  exam: { label: 'Test', color: '#E5484D', soft: '#FCE4E4', text: '#A8262B' },
+  cancelled: { label: 'Entfall', color: '#F08C2E', soft: '#FDEBD8', text: '#A55912' },
+} as const;

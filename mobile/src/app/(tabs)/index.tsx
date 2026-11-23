@@ -9,7 +9,7 @@ import { addDays, dayNum, formatLong, greeting, monthYear, relativeDay, startOfW
 import { ItemRow } from '@/components/ItemRow';
 import { Mascot } from '@/components/Mascot';
 import { Card, ErrorBox, Pill, Segmented, T } from '@/components/ui';
-import { colors, font, radius, shadow } from '@/theme';
+import { colors, font, itemMark, MARK_STYLE, radius, shadow } from '@/theme';
 
 type View_ = 'heute' | 'woche';
 
@@ -151,11 +151,12 @@ function WeekView() {
         {days.map((d, i) => {
           const on = d === selected;
           const count = (items ?? []).filter(x => x.date === d && x.status !== 'cancelled').length;
+          const exam = (items ?? []).some(x => x.date === d && itemMark(x) === 'exam');
           return (
             <Pressable key={d} onPress={() => setSelected(d)} style={[st.day, on && st.dayOn]}>
               <T variant="small" style={on ? { color: 'rgba(255,255,255,0.8)' } : undefined}>{WEEKDAYS_SHORT[i]}</T>
               <T style={[st.dayNum, on && { color: colors.white }, d === today && !on && { color: colors.leafDark }]}>{dayNum(d)}</T>
-              <View style={[st.dot, { opacity: count ? 1 : 0 }, on && { backgroundColor: colors.lime }]} />
+              <View style={[st.dot, { opacity: count ? 1 : 0 }, on && { backgroundColor: colors.lime }, exam && { backgroundColor: MARK_STYLE.exam.color, width: 7, height: 7, borderRadius: 4 }]} />
             </Pressable>
           );
         })}

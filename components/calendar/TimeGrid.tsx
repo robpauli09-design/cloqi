@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { AlertTriangle, Bell, Check, MapPin, Repeat } from 'lucide-react';
 import { moveItemAction } from '@/app/actions/calendar';
 import { minutesToTime, utcToZoned, WEEKDAYS_SHORT_DE, weekdayOf } from '@/lib/time';
-import { CATEGORY_META, type CalendarItem } from '@/lib/types';
+import { CANCELLED_BG, MARK_STYLE, itemMark, CATEGORY_META, type CalendarItem } from '@/lib/types';
 import { toastResult } from '../Toaster';
 
 interface Props {
@@ -192,7 +192,9 @@ function ItemCard({ p, tz, conflict, detailed, draggable, onOpen, hourPx }: {
 }) {
   const i = p.item;
   const m = CATEGORY_META[i.category];
-  const cancelled = i.status === 'cancelled';
+  const mark = itemMark(i);
+  const ms = mark ? MARK_STYLE[mark] : null;
+  const cancelled = mark === 'cancelled';
   const done = i.status === 'done';
   const small = p.height < 36;
   const duration = p.endMin - p.startMin;
@@ -208,18 +210,20 @@ function ItemCard({ p, tz, conflict, detailed, draggable, onOpen, hourPx }: {
       onClick={() => onOpen(i)}
       title={`${i.title} · ${utcToZoned(i.startAt, tz).time}–${utcToZoned(i.endAt, tz).time}`}
       className={`absolute z-10 overflow-hidden rounded-lg border-l-[3px] px-1.5 text-left shadow-sm transition hover:z-20 hover:shadow-lift
-        ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${conflict ? 'ring-2 ring-danger' : ''} ${cancelled ? 'opacity-50' : ''}
+        ${draggable ? 'cursor-grab active:cursor-grabbing' : ''} ${conflict ? 'ring-2 ring-danger' : ''} ${mark === 'exam' ? 'ring-1 ring-danger/50' : ''}
         ${i.kind === 'deadline' ? 'border-dashed' : ''}`}
       style={{
         top: p.top + 1, height: p.height - 2,
         left: `calc(${(p.col / p.cols) * 100}% + 2px)`, width: `calc(${100 / p.cols}% - 4px)`,
-        background: m.soft, borderLeftColor: i.calendarColor && i.kind === 'event' ? i.calendarColor : m.color, color: m.text,
+        background: cancelled ? CANCELLED_BG : ms ? ms.soft : m.soft,
+        borderLeftColor: ms ? ms.color : i.calendarColor && i.kind === 'event' ? i.calendarColor : m.color, color: ms ? ms.text : m.text,
       }}
     >
       <div className={`flex items-start gap-1 ${small ? 'py-0' : 'py-1'}`}>
         {done && <Check size={12} className="mt-0.5 shrink-0" strokeWidth={3} />}
         {conflict && <AlertTriangle size={12} className="mt-0.5 shrink-0 text-danger" />}
-        <span className={`min-w-0 truncate text-[11px] font-bold leading-tight ${cancelled ? 'line-through' : ''}`}>{i.title}</span>
+        {ms && !small && <span className="shrink-0 rounded px-1 text-[9px] font-extrabold uppercase leading-[14px] text-white" style={{ background: ms.color }}>{ms.label}</span>}
+        <span className={`min-w-0 truncate text-[11px] font-bold leading-tight ${cancelled ? 'line-through decoration-2' : ''}`}>{i.title}</span>
       </div>
       {!small && (
         <p className="truncate text-[10px] font-medium opacity-80">

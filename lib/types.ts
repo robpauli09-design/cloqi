@@ -22,6 +22,24 @@ export type Category =
 
 export const CATEGORIES: Category[] = ['schule', 'lernen', 'pruefung', 'hausuebung', 'training', 'arbeit', 'freizeit', 'privat'];
 
+/**
+ * Calendar highlights (same rule in the app: mobile/src/theme.ts itemMark):
+ *  exam      – Test, Schularbeit, Prüfung (Learn deadlines, events in "Prüfung", WebUntis exams) → red
+ *  cancelled – lesson/event that does not take place (Entfall) → orange with stripes
+ */
+export type ItemMark = 'exam' | 'cancelled' | null;
+export function itemMark(i: { category: string; status: string }): ItemMark {
+  if (i.status === 'cancelled') return 'cancelled';
+  if (i.category === 'pruefung' && i.status !== 'done') return 'exam';
+  return null;
+}
+export const MARK_STYLE = {
+  exam: { label: 'Test', color: '#E5484D', soft: '#FCE4E4', text: '#A8262B' },
+  cancelled: { label: 'Entfall', color: '#F08C2E', soft: '#FDEBD8', text: '#A55912' },
+} as const;
+/** Diagonal stripes for cancelled items. */
+export const CANCELLED_BG = 'repeating-linear-gradient(135deg, #FDEBD8 0 6px, #FFF6EC 6px 12px)';
+
 export const CATEGORY_META: Record<Category, { label: string; color: string; soft: string; text: string }> = {
   schule:     { label: 'Schule / Uni',  color: '#286B24', soft: '#E3EFE1', text: '#1E5A1B' },
   lernen:     { label: 'Lernen',        color: '#7CC51B', soft: '#EDF6E3', text: '#3D6B0B' },

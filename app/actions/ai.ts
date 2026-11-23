@@ -17,12 +17,12 @@ export async function chatWithCloqi(message: string, threadId: string | null = n
 
 /** Voice input: recorded audio (FormData field "audio") → text. */
 export async function transcribeAction(form: FormData): Promise<{ ok: boolean; text?: string; error?: string }> {
-  await requireUser();
+  const user = await requireUser();
   const file = form.get('audio');
   if (!(file instanceof Blob) || !file.size) return { ok: false, error: 'Keine Aufnahme erhalten.' };
   if (file.size > 4 * 1024 * 1024) return { ok: false, error: 'Die Aufnahme ist zu lang.' };
   const name = file instanceof File && /\.(m4a|mp4|webm|wav|mp3|ogg)$/i.test(file.name) ? file.name : 'aufnahme.webm';
-  try { return { ok: true, text: await transcribe(file, name) }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Spracherkennung fehlgeschlagen.' }; }
+  try { return { ok: true, text: await transcribe(file, name, user.id) }; } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Spracherkennung fehlgeschlagen.' }; }
 }
 
 /** Chat history: the user's conversations, newest first. */

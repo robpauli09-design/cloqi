@@ -91,21 +91,24 @@ export async function upsertFeedEvents(
     if (endAt > maxEnd) maxEnd = endAt;
     seen.add(ev.uid);
     const status = ev.status === 'CANCELLED' ? 'cancelled' : 'active';
+    // exams marked in WebUntis (or an iCal CATEGORIES entry) are shown as tests
+    const isExam = ev.categories.some(c => /^(EXAM|PRÜFUNG|PRUEFUNG|TEST|SCHULARBEIT)$/i.test(c));
     const fields = {
       title: ev.summary.slice(0, 200), description: ev.description?.slice(0, 2000) ?? null, startAt, endAt, allDay: ev.allDay,
       location: ev.location?.slice(0, 200) ?? null, teacher: teacherFrom(ev), status: status as 'active' | 'cancelled',
+      category: (isExam ? 'pruefung' : category) as Category,
     };
     const old = existing.get(ev.uid);
     const when = utcToZoned(startAt, tz);
     const whenText = `${formatDateDe(when.date, { weekday: true })}, ${when.time} Uhr`;
 
     if (!old) {
-      await createEvent(user.id, { ...fields, category, source, externalUid: ev.uid, connectionId, calendarId });
+      await createEvent(user.id, { ...fields, source, externalUid: ev.uid, connectionId, calendarId });
       stats.imported++;
       if (status === 'cancelled') stats.cancelled++;
       continue;
     }
-    const changed = old.startAt !== startAt || old.endAt !== endAt || old.location !== fields.location || old.status !== status || old.title !== fields.title;
+    const changed = old.startAt !== startAt || old.endAt !== endAt || old.location !== fields.location || old.status !== status || old.title !== fields.title || old.category !== fields.category;
     if (!changed) continue;
     await updateEvent(user.id, old.id, fields);
     stats.updated++;

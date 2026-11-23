@@ -1,7 +1,7 @@
 'use client';
 
 import { addDays, utcToZoned, WEEKDAYS_SHORT_DE } from '@/lib/time';
-import { CATEGORY_META, type CalendarItem } from '@/lib/types';
+import { CANCELLED_BG, MARK_STYLE, itemMark, CATEGORY_META, type CalendarItem } from '@/lib/types';
 
 export function MonthView({ month, gridStart, items, today, tz, onDay, onOpen }: {
   month: string; gridStart: string; items: CalendarItem[]; today: string; tz: string;
@@ -27,7 +27,8 @@ export function MonthView({ month, gridStart, items, today, tz, onDay, onOpen }:
           const list = (byDay.get(d) ?? []).filter(i => i.status !== 'missed');
           const inMonth = d.startsWith(month);
           const exams = list.filter(i => i.category === 'pruefung').length;
-          const visible = list.filter(i => i.kind !== 'lesson').slice(0, 3);
+          // cancelled lessons are shown too – an Entfall matters
+          const visible = list.filter(i => i.kind !== 'lesson' || i.status === 'cancelled').slice(0, 3);
           const lessons = list.filter(i => i.kind === 'lesson' && i.status === 'active').length;
           return (
             <div key={d} className={`min-h-[104px] border-b border-l border-line p-1.5 first:border-l-0 ${inMonth ? 'bg-white' : 'bg-paper/70'}`}>
@@ -38,14 +39,16 @@ export function MonthView({ month, gridStart, items, today, tz, onDay, onOpen }:
               <div className="mt-1 space-y-0.5">
                 {exams > 0 && <span className="chip bg-danger-soft px-1.5 py-0 text-[10px] text-danger">{exams} Prüfung{exams > 1 ? 'en' : ''}</span>}
                 {visible.map(i => (
-                  <button key={i.key} onClick={() => onOpen(i)} className="flex w-full items-center gap-1 truncate rounded px-1 text-left text-[11px] font-medium hover:bg-paper">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: i.calendarColor && i.allDay ? i.calendarColor : CATEGORY_META[i.category].color }} />
-                    <span className={`truncate ${i.status === 'cancelled' ? 'line-through opacity-60' : ''}`}>{i.title}</span>
+                  <button key={i.key} onClick={() => onOpen(i)}
+                    className={`flex w-full items-center gap-1 truncate rounded px-1 text-left text-[11px] font-medium ${itemMark(i) ? 'font-semibold' : 'hover:bg-paper'}`}
+                    style={itemMark(i) ? { background: itemMark(i) === 'cancelled' ? CANCELLED_BG : MARK_STYLE.exam.soft, color: MARK_STYLE[itemMark(i)!].text } : undefined}>
+                    <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: itemMark(i) ? MARK_STYLE[itemMark(i)!].color : i.calendarColor && i.allDay ? i.calendarColor : CATEGORY_META[i.category].color }} />
+                    <span className={`truncate ${i.status === 'cancelled' ? 'line-through' : ''}`}>{i.title}</span>
                   </button>
                 ))}
                 {lessons > 0 && <p className="px-1 text-[10px] text-ink-faint">{lessons} Stunde{lessons > 1 ? 'n' : ''} Unterricht</p>}
-                {list.filter(i => i.kind !== 'lesson').length > 3 && (
-                  <button onClick={() => onDay(d)} className="px-1 text-[10px] font-semibold text-leaf-dark">+{list.filter(i => i.kind !== 'lesson').length - 3} weitere</button>
+                {list.filter(i => i.kind !== 'lesson' || i.status === 'cancelled').length > 3 && (
+                  <button onClick={() => onDay(d)} className="px-1 text-[10px] font-semibold text-leaf-dark">+{list.filter(i => i.kind !== 'lesson' || i.status === 'cancelled').length - 3} weitere</button>
                 )}
               </div>
             </div>

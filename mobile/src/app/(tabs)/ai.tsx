@@ -171,6 +171,8 @@ export default function Ai() {
           keyExtractor={m => m.id}
           contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
+          // empty chat: nothing to scroll, so no bouncing
+          scrollEnabled={messages.length > 0} bounces={messages.length > 0} alwaysBounceVertical={false} overScrollMode="never"
           ListEmptyComponent={
             <View style={st.empty}>
               <View style={st.avatar}><Mascot name={user?.mascot} variant="head" size={60} /></View>

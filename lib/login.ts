@@ -16,7 +16,7 @@ export async function loginOrRegister(mode: 'login' | 'register', rawEmail: stri
   // Counted synchronously before any await (no check-then-act race). Limits per 15 min:
   // per IP 30, per account+IP 8, per account 50 – slows guessing without letting one
   // attacker lock the owner out. Successful logins are refunded below.
-  if (!tryConsume([[keys[0], 30], [keys[1], 8], [keys[2], 50]])) {
+  if (!tryConsume([[keys[0], 30], [keys[1], 8], [keys[2], 50], ...(mode === 'register' ? [[`reg:${ip}`, 10] as [string, number]] : [])])) {
     throw new InputError('Zu viele Versuche. Bitte warte ein paar Minuten.');
   }
   if (mode === 'register') {

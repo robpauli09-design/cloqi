@@ -64,6 +64,13 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
   const router = useRouter();
   const voice = useRecorder();
   useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages, pending]);
+  useEffect(() => { // empty chat fits the screen: no rubber-band scrolling (iPhone) while nothing is written
+    if (messages.length) return;
+    const html = document.documentElement, body = document.body;
+    const prev = [html.style.overscrollBehaviorY, body.style.overscrollBehaviorY];
+    html.style.overscrollBehaviorY = 'none'; body.style.overscrollBehaviorY = 'none';
+    return () => { html.style.overscrollBehaviorY = prev[0]; body.style.overscrollBehaviorY = prev[1]; };
+  }, [messages.length]);
   useEffect(() => { // auto-grow the input
     const el = input.current;
     if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 160)}px`; }

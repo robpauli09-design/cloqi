@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, MapPin, Repeat } from 'lucide-react';
 import { formatDateDe, relativeDayDe, utcToZoned } from '@/lib/time';
-import { CATEGORY_META, type CalendarItem } from '@/lib/types';
+import { CANCELLED_BG, MARK_STYLE, itemMark, CATEGORY_META, type CalendarItem } from '@/lib/types';
 import { Mascot, type MascotName } from '../Mascot';
 
 const FILTERS = [
@@ -56,15 +56,20 @@ export function AgendaView({ items, tz, today, filter, from, to, conflictKeys, o
             <ul className="divide-y divide-line">
               {list.map(i => {
                 const m = CATEGORY_META[i.category];
+                const mark = itemMark(i);
                 return (
                   <li key={i.key}>
-                    <button onClick={() => onOpen(i)} className="flex w-full items-center gap-4 px-5 py-3 text-left hover:bg-paper/60">
+                    <button onClick={() => onOpen(i)} className="flex w-full items-center gap-4 px-5 py-3 text-left hover:bg-paper/60"
+                      style={mark ? { background: mark === 'cancelled' ? CANCELLED_BG : MARK_STYLE.exam.soft } : undefined}>
                       <span className="w-24 shrink-0 text-sm font-semibold tabular text-ink-soft">
                         {i.allDay ? 'Ganztägig' : `${utcToZoned(i.startAt, tz).time}–${utcToZoned(i.endAt, tz).time}`}
                       </span>
-                      <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: m.color }} />
+                      <span className="h-8 w-1 shrink-0 rounded-full" style={{ background: mark ? MARK_STYLE[mark].color : m.color }} />
                       <span className="min-w-0 flex-1">
-                        <span className={`block truncate font-semibold ${i.status === 'cancelled' ? 'line-through opacity-60' : ''}`}>{i.title}{i.status === 'cancelled' && ' – entfällt'}</span>
+                        <span className="flex items-center gap-2">
+                          {mark && <span className="shrink-0 rounded px-1.5 text-[10px] font-extrabold uppercase leading-4 text-white" style={{ background: MARK_STYLE[mark].color }}>{MARK_STYLE[mark].label}</span>}
+                          <span className={`block truncate font-semibold ${mark === 'cancelled' ? 'line-through decoration-2' : ''}`} style={mark ? { color: MARK_STYLE[mark].text } : undefined}>{i.title}</span>
+                        </span>
                         <span className="flex flex-wrap items-center gap-x-2 text-xs text-ink-soft">
                           <span>{m.label}</span><span>· {i.calendarLabel}</span>
                           {i.location && <span className="inline-flex items-center gap-0.5"><MapPin size={11} />{i.location}</span>}

@@ -7,7 +7,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const user = await requireReadyUser();
   const nav = { name: user.name || user.email, email: user.email, mascot: user.prefs.mascot, cycle: user.prefs.cycleEnabled };
   return (
-    <div className="min-h-screen lg:pl-[248px]">
+    <div className="min-h-dvh lg:pl-[248px]">
       <Sidebar {...nav} />
       <main className="mx-auto w-full max-w-[1400px] px-4 pb-32 pt-5 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8"><MobileSectionTabs />{children}</main>
       <MobileNav mascot={nav.mascot} />

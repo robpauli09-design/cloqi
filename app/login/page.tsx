@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (user) redirect(user.onboarded ? '/dashboard' : '/onboarding');
   const { deleted } = await searchParams;
   return (
-    <main className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
+    <main className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
       <section className="relative hidden overflow-hidden bg-leaf-deep px-12 py-12 text-paper lg:flex lg:flex-col">
         <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-leaf/25 blur-3xl" />
         <div className="absolute -bottom-32 left-10 h-96 w-96 rounded-full bg-lime/15 blur-3xl" />

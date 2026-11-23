@@ -113,7 +113,7 @@ export async function studentIsPublic(t: PublicTarget, today: string): Promise<b
 interface Period {
   id: number; lessonId: number; date: number; startTime: number; endTime: number;
   lessonText?: string; periodText?: string; substText?: string; studentGroup?: string; cellState?: string;
-  is?: { cancelled?: boolean; event?: boolean };
+  is?: { cancelled?: boolean; event?: boolean; exam?: boolean };
   elements: { type: number; id: number; orgId?: number }[];
 }
 interface WeekData {
@@ -164,7 +164,7 @@ export async function fetchPublicTimetable(t: PublicTarget, elementType: 1 | 5, 
         end: zonedToUtc(day, hhmm(p.endTime), tz),
         allDay: false,
         status: p.is?.cancelled || p.cellState === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED',
-        categories: [],
+        categories: p.is?.exam || p.cellState === 'EXAM' ? ['EXAM'] : [],
         group,
       });
     }

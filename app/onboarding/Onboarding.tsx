@@ -51,7 +51,7 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
   const message = step === 0 ? `${MESSAGES[0]} Ich bin ${mascot === 'clea' ? 'Clea' : 'Cloki'}.` : step === 1 && name ? `Hi ${name}! ${MESSAGES[1]}` : MESSAGES[step];
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-leaf-soft to-paper px-4 py-6 sm:py-10">
+    <main className="min-h-dvh bg-gradient-to-b from-leaf-soft to-paper px-4 py-6 sm:py-10">
       <div className="mx-auto flex max-w-2xl items-center justify-between">
         <Logo size="sm" />
         <span className="text-xs font-semibold text-ink-faint tabular">Schritt {step + 1} von {MESSAGES.length}</span>
