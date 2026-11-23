@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, BookOpenText, ChevronRight, Flower2, Link2 } from 'lucide-react';
 import { requireReadyUser } from '@/lib/auth';
 import { listConnections } from '@/lib/repo';
 import { formatDateDe, utcToZoned } from '@/lib/time';
@@ -28,6 +28,20 @@ export default async function ProfilePage() {
           <p className="muted">{user.email} · Mitglied seit {formatDateDe(utcToZoned(user.createdAt, user.timezone).date, { year: true })}</p>
         </div>
       </header>
+
+      <nav aria-label="Weitere Bereiche" className="card divide-y divide-line overflow-hidden lg:hidden">
+        {[
+          { href: '/vault', label: 'Wissen', hint: 'Was CLOQI über dich weiß', icon: BookOpenText },
+          { href: '/connect', label: 'Kalender verbinden', hint: 'WebUntis, Google, Apple, Outlook', icon: Link2 },
+          ...(user.prefs.cycleEnabled ? [{ href: '/cycle', label: 'Cycle', hint: 'Dein Zyklus – privat', icon: Flower2 }] : []),
+        ].map(({ href, label, hint, icon: Icon }) => (
+          <Link key={href} href={href} className="flex items-center gap-3 px-4 py-3.5 active:bg-paper">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-leaf-soft text-leaf-dark"><Icon size={18} /></span>
+            <span className="min-w-0 flex-1"><span className="block font-semibold">{label}</span><span className="block truncate text-xs text-ink-soft">{hint}</span></span>
+            <ChevronRight size={18} className="text-ink-faint" />
+          </Link>
+        ))}
+      </nav>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <ProfileForm name={user.name} userType={user.userType} gender={user.gender} timezone={user.timezone} mascot={user.prefs.mascot} />

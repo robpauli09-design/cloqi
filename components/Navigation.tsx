@@ -58,23 +58,65 @@ export function Sidebar({ name, email, mascot, cycle }: { name: string; email: s
   );
 }
 
-export function MobileNav({ cycle: _cycle }: { cycle: boolean }) {
+/**
+ * Phone: three tabs only – Kalender (incl. Heute, Lernen, Life), CLOQI AI in the middle, Profil
+ * (incl. Wissen, Kalender verbinden, Cycle). Same structure as the Expo app.
+ */
+const CAL_GROUP = ['/dashboard', '/calendar', '/learn', '/life'];
+const PROFILE_GROUP = ['/profile', '/connect', '/vault', '/cycle'];
+const inGroup = (path: string, group: string[]) => group.some(h => path === h || path.startsWith(`${h}/`));
+
+export function MobileNav({ mascot }: { mascot: MascotName }) {
   const path = usePathname();
-  const items = NAV.filter(i => i.href !== '/vault'); // six main areas; Wissen and Cycle are linked from CLOQI AI, Home and Profil
+  const ai = path === '/ai' || path.startsWith('/ai/');
+  const tab = (href: string, label: string, Icon: typeof Home, active: boolean) => (
+    <Link href={href} aria-current={active ? 'page' : undefined}
+      className={`flex flex-1 flex-col items-center gap-0.5 py-1.5 text-[11px] font-semibold ${active ? 'text-leaf-dark' : 'text-ink-faint'}`}>
+      <span className={`grid h-8 w-14 place-items-center rounded-full transition ${active ? 'bg-lime/40' : ''}`}><Icon size={21} strokeWidth={active ? 2.4 : 2} /></span>
+      {label}
+    </Link>
+  );
   return (
-    <nav aria-label="Navigation" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-2 pt-1.5 backdrop-blur lg:hidden">
-      <div className="mx-auto flex max-w-lg justify-between">
-        {items.map(({ href, label, icon: Icon }) => {
-          const active = path === href || path.startsWith(`${href}/`);
+    <nav aria-label="Navigation" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-6 pt-1 backdrop-blur lg:hidden">
+      <div className="mx-auto flex max-w-sm items-end justify-between">
+        {tab('/dashboard', 'Kalender', CalendarDays, inGroup(path, CAL_GROUP))}
+        <Link href="/ai" aria-current={ai ? 'page' : undefined} aria-label="CLOQI AI"
+          className="flex flex-1 flex-col items-center gap-0.5 pb-1.5 text-[11px] font-semibold">
+          <span className={`-mt-7 grid h-16 w-16 place-items-center rounded-full border-4 border-white shadow-lift transition active:scale-95 ${ai ? 'bg-leaf-dark' : 'bg-leaf'}`}>
+            <Mascot name={mascot} variant="head" size={46} />
+          </span>
+          <span className={ai ? 'text-leaf-dark' : 'text-ink-faint'}>CLOQI AI</span>
+        </Link>
+        {tab('/profile', 'Profil', UserRound, inGroup(path, PROFILE_GROUP))}
+      </div>
+    </nav>
+  );
+}
+
+const SECTIONS = [
+  { href: '/dashboard', label: 'Heute' },
+  { href: '/calendar', label: 'Kalender' },
+  { href: '/learn', label: 'Lernen' },
+  { href: '/life', label: 'Life' },
+];
+
+/** Phone only: switch between the parts of the Kalender tab. */
+export function MobileSectionTabs() {
+  const path = usePathname();
+  if (!inGroup(path, CAL_GROUP)) return null;
+  return (
+    <div className="-mx-4 mb-4 overflow-x-auto px-4 lg:hidden">
+      <div className="flex w-max min-w-full gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-line">
+        {SECTIONS.map(s => {
+          const active = path === s.href || path.startsWith(`${s.href}/`);
           return (
-            <Link key={href} href={href} aria-current={active ? 'page' : undefined}
-              className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-xl py-1.5 text-[10px] font-semibold ${active ? 'text-leaf-dark' : 'text-ink-faint'}`}>
-              <span className={`grid h-8 w-12 place-items-center rounded-full transition ${active ? 'bg-lime/40' : ''}`}><Icon size={20} /></span>
-              <span className="truncate">{label}</span>
+            <Link key={s.href} href={s.href} aria-current={active ? 'page' : undefined}
+              className={`flex-1 whitespace-nowrap rounded-xl px-3 py-2 text-center text-sm font-semibold transition ${active ? 'bg-leaf-dark text-white shadow-sm' : 'text-ink-soft'}`}>
+              {s.label}
             </Link>
           );
         })}
       </div>
-    </nav>
+    </div>
   );
 }

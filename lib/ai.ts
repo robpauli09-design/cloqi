@@ -387,3 +387,24 @@ export async function runAgent(user: User, message: string): Promise<AgentResult
 }
 
 export { readVault };
+
+export interface ChatReply { ok: boolean; reply: string; actions: string[] }
+
+const lastCall = new Map<string, number>();
+
+/** One chat turn for a user – used by the website and the app. */
+export async function chatFor(user: User, message: string): Promise<ChatReply> {
+  const text = String(message ?? '').trim().slice(0, 2000);
+  if (!text) return { ok: false, reply: 'Schreib mir etwas 🙂', actions: [] };
+  if (!aiConfig()) return { ok: false, reply: 'CLOQI AI ist auf diesem Server noch nicht eingerichtet (AI_API_KEY und AI_MODEL fehlen).', actions: [] };
+  // simple per-user throttle against accidental loops / cost spikes
+  const now = Date.now();
+  if (now - (lastCall.get(user.id) ?? 0) < 1500) return { ok: false, reply: 'Einen Moment bitte – ich bin noch beim letzten Schritt.', actions: [] };
+  lastCall.set(user.id, now);
+  try {
+    const r = await runAgent(user, text);
+    return { ok: true, reply: r.reply, actions: r.actions };
+  } catch (e) {
+    return { ok: false, reply: e instanceof Error ? e.message : 'Da ist etwas schiefgelaufen.', actions: [] };
+  }
+}

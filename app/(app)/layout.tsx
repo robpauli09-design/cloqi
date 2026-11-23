@@ -1,5 +1,5 @@
 import { requireReadyUser } from '@/lib/auth';
-import { Sidebar, MobileNav } from '@/components/Navigation';
+import { Sidebar, MobileNav, MobileSectionTabs } from '@/components/Navigation';
 import { Toaster } from '@/components/Toaster';
 import { BackgroundTasks } from '@/components/BackgroundTasks';
 
@@ -9,8 +9,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="min-h-screen lg:pl-[248px]">
       <Sidebar {...nav} />
-      <main className="mx-auto w-full max-w-[1400px] px-4 pb-28 pt-5 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">{children}</main>
-      <MobileNav cycle={nav.cycle} />
+      <main className="mx-auto w-full max-w-[1400px] px-4 pb-32 pt-5 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8"><MobileSectionTabs />{children}</main>
+      <MobileNav mascot={nav.mascot} />
       <Toaster mascot={user.prefs.mascot} />
       <BackgroundTasks mascot={user.prefs.mascot} />
     </div>

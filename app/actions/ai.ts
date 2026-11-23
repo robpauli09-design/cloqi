@@ -2,32 +2,17 @@
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth';
-import { aiConfig, runAgent } from '@/lib/ai';
+import { chatFor, type ChatReply } from '@/lib/ai';
 import { clearChat, deleteVaultFile, getVaultFile, writeVaultFile } from '@/lib/repo';
 import { normalizePath, readVaultFile, userCanDelete, userCanWrite } from '@/lib/vault';
 import type { ActionResult } from '@/lib/validate';
 
-export interface ChatReply { ok: boolean; reply: string; actions: string[] }
-
-const lastCall = new Map<string, number>();
-
 /** Sends one message to CLOQI AI (tool-using agent). */
 export async function chatWithCloqi(message: string): Promise<ChatReply> {
   const user = await requireUser();
-  const text = String(message ?? '').trim().slice(0, 2000);
-  if (!text) return { ok: false, reply: 'Schreib mir etwas 🙂', actions: [] };
-  if (!aiConfig()) return { ok: false, reply: 'CLOQI AI ist auf diesem Server noch nicht eingerichtet (AI_API_KEY und AI_MODEL fehlen).', actions: [] };
-  // simple per-user throttle against accidental loops / cost spikes
-  const now = Date.now();
-  if (now - (lastCall.get(user.id) ?? 0) < 1500) return { ok: false, reply: 'Einen Moment bitte – ich bin noch beim letzten Schritt.', actions: [] };
-  lastCall.set(user.id, now);
-  try {
-    const r = await runAgent(user, text);
-    if (r.actions.length) revalidatePath('/', 'layout');
-    return { ok: true, reply: r.reply, actions: r.actions };
-  } catch (e) {
-    return { ok: false, reply: e instanceof Error ? e.message : 'Da ist etwas schiefgelaufen.', actions: [] };
-  }
+  const r = await chatFor(user, message);
+  if (r.actions.length) revalidatePath('/', 'layout');
+  return r;
 }
 
 export async function clearChatAction(): Promise<ActionResult> {

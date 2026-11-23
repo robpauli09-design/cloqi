@@ -124,7 +124,7 @@ export function Chat({ mascot, name, aiEnabled, history }: { mascot: MascotName;
       </div>
 
       <form onSubmit={e => { e.preventDefault(); send(text); }}
-        className="sticky bottom-20 mt-6 flex items-center gap-2 rounded-full border border-line bg-white p-2 shadow-lift lg:bottom-4">
+        className="sticky bottom-28 mt-6 flex items-center gap-2 rounded-full border border-line bg-white p-2 shadow-lift lg:bottom-4">
         <VoiceButton onText={setText} onFinal={send} />
         <input value={text} onChange={e => setText(e.target.value)} maxLength={2000} aria-label="Nachricht an CLOQI"
           placeholder="„CLOQI, ich habe am Freitag einen Englisch-Test.“" className="h-11 min-w-0 flex-1 bg-transparent px-2 text-sm outline-none" />

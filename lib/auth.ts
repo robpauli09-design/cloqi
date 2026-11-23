@@ -20,6 +20,28 @@ export async function createSession(userId: string) {
   });
 }
 
+/** App login: same session table, but the token is returned to the app instead of set as a cookie. */
+export async function issueAppToken(userId: string): Promise<string> {
+  const token = randomToken(32);
+  await insertSession(sha256(token), userId, new Date(Date.now() + SESSION_DAYS * 86400000).toISOString());
+  await touchLogin(userId);
+  return token;
+}
+
+/** User for an app request (`Authorization: Bearer <token>`), or null. */
+export async function userFromBearer(req: Request): Promise<User | null> {
+  const m = req.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_-]{20,100})$/);
+  if (!m) return null;
+  const row = await findSession(sha256(m[1]));
+  if (!row || row.expiresAt < nowIso()) return null;
+  return await getUser(row.userId);
+}
+
+export async function revokeAppToken(req: Request) {
+  const m = req.headers.get('authorization')?.match(/^Bearer ([A-Za-z0-9_-]{20,100})$/);
+  if (m) await deleteSession(sha256(m[1]));
+}
+
 export async function destroySession() {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;

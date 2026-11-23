@@ -6,7 +6,7 @@ trägt es ein, plant Lernblöcke um dein Leben herum und merkt sich in deinem **
 wer du bist. Begleitet wirst du von **Cloki** (oder **Clea**).
 
 > Web-Prototyp (Desktop, Tablet, Smartphone-Browser) auf **Vercel + Supabase**.
-> Native iOS/Android-Apps folgen später.
+> Die App für iPhone und Android liegt in [`mobile/`](mobile/README.md) (Expo) und nutzt die App-API unter `/api/mobile/*`.
 
 ## Einrichtung (Supabase + Vercel)
 
