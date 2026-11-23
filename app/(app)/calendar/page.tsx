@@ -58,7 +58,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
   return (
     <CalendarApp
-      view={view} date={date} today={today} tz={tz} filter={filter} rangeFrom={fromDay} rangeTo={addDays(toDay, -1)}
+      view={view} explicitView={Boolean(sp.view)} date={date} today={today} tz={tz} filter={filter} rangeFrom={fromDay} rangeTo={addDays(toDay, -1)}
       items={items} calendars={await listCalendars(user.id)} mascot={user.prefs.mascot} reminderDefault={user.prefs.reminderDefault}
     />
   );

@@ -3,15 +3,17 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-n
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import * as Haptics from 'expo-haptics';
 import { api, errorText, type Item, type Today } from '@/api';
 import { useAuth } from '@/auth';
 import { addDays, dayNum, formatLong, greeting, monthYear, relativeDay, startOfWeek, WEEKDAYS_SHORT } from '@/dates';
+import { DayView } from '@/components/DayView';
 import { ItemRow } from '@/components/ItemRow';
 import { Mascot } from '@/components/Mascot';
 import { Card, ErrorBox, Pill, Segmented, T } from '@/components/ui';
 import { colors, font, itemMark, MARK_STYLE, radius, shadow } from '@/theme';
 
-type View_ = 'heute' | 'woche';
+type View_ = 'heute' | 'tag' | 'liste';
 
 export default function Kalender() {
   const [view, setView] = useState<View_>('heute');
@@ -19,9 +21,9 @@ export default function Kalender() {
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
       <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
-        <Segmented<View_> value={view} onChange={setView} options={[{ value: 'heute', label: 'Heute' }, { value: 'woche', label: 'Woche' }]} />
+        <Segmented<View_> value={view} onChange={setView} options={[{ value: 'heute', label: 'Heute' }, { value: 'tag', label: 'Tag' }, { value: 'liste', label: 'Liste' }]} />
       </View>
-      {view === 'heute' ? <TodayView /> : <WeekView />}
+      {view === 'heute' ? <TodayView /> : <CalendarView mode={view} />}
       <Pressable onPress={() => router.push('/neuer-termin')} style={({ pressed }) => [st.fab, pressed && { transform: [{ scale: 0.94 }] }]} accessibilityRole="button" accessibilityLabel="Neuer Termin">
         <Ionicons name="add" size={30} color={colors.white} />
       </Pressable>
@@ -44,6 +46,7 @@ function useApi<T>(path: string) {
 
 function TodayView() {
   const { user } = useAuth();
+  const router = useRouter();
   const { data, error, refreshing, reload } = useApi<Today>('/today');
   return (
     <ScrollView contentContainerStyle={st.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.leaf} />}>
@@ -81,7 +84,7 @@ function TodayView() {
             <T variant="muted" style={{ textAlign: 'center' }}>Sag CLOQI AI einfach, was ansteht.</T>
           </View>
         )}
-        {data?.items.map(i => <ItemRow key={i.key} item={i} />)}
+        {data?.items.map(i => <ItemRow key={i.key} item={i} onPress={() => router.push({ pathname: '/termin', params: { item: JSON.stringify(i) } })} />)}
         {data?.freeToday[0] && (
           <View style={st.free}><T style={{ color: colors.leafDeep, fontFamily: font.medium }}>Freie Zeit: {data.freeToday[0].start}–{data.freeToday[0].end} Uhr</T></View>
         )}
@@ -114,7 +117,9 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
-function WeekView() {
+/** Day (hour grid, like Google Calendar) or list view, with a week strip on top. */
+function CalendarView({ mode }: { mode: 'tag' | 'liste' }) {
+  const router = useRouter();
   const [today, setToday] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [items, setItems] = useState<Item[] | null>(null);
@@ -135,16 +140,20 @@ function WeekView() {
     finally { setRefreshing(false); }
   }, [monday]);
   useFocusEffect(useCallback(() => { void reload(); }, [reload]));
+  const swipe = useCallback((dir: 1 | -1) => { void Haptics.selectionAsync(); setSelected(d => (d ? addDays(d, dir) : d)); }, []);
 
   if (!selected || !monday) return <View style={st.scroll}><ErrorBox text={error} /></View>;
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
-  const dayItems = (items ?? []).filter(i => i.date === selected);
+  const dayItems = (items ?? []).filter(i => i.date === selected || (i.date < selected && (i as Item & { endDate?: string }).endDate! >= selected && !i.allDay));
+  const open = (i: Item) => router.push({ pathname: '/termin', params: { item: JSON.stringify(i) } });
 
-  return (
-    <ScrollView contentContainerStyle={st.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.leaf} />}>
+  const header = (
+    <View style={{ paddingHorizontal: 16, gap: 10, paddingBottom: 8 }}>
       <View style={st.weekHead}>
         <Pressable onPress={() => setSelected(addDays(selected, -7))} hitSlop={12} accessibilityRole="button" accessibilityLabel="Vorige Woche"><Ionicons name="chevron-back" size={24} color={colors.leafDark} /></Pressable>
-        <T variant="h2">{monthYear(monday)}</T>
+        <Pressable onPress={() => today && setSelected(today)} accessibilityRole="button" accessibilityLabel="Zu heute">
+          <T variant="h2">{monthYear(selected)}</T>
+        </Pressable>
         <Pressable onPress={() => setSelected(addDays(selected, 7))} hitSlop={12} accessibilityRole="button" accessibilityLabel="Nächste Woche"><Ionicons name="chevron-forward" size={24} color={colors.leafDark} /></Pressable>
       </View>
       <View style={st.strip}>
@@ -153,7 +162,7 @@ function WeekView() {
           const count = (items ?? []).filter(x => x.date === d && x.status !== 'cancelled').length;
           const exam = (items ?? []).some(x => x.date === d && itemMark(x) === 'exam');
           return (
-            <Pressable key={d} onPress={() => setSelected(d)} style={[st.day, on && st.dayOn]}>
+            <Pressable key={d} onPress={() => setSelected(d)} style={[st.day, on && st.dayOn]} accessibilityRole="button" accessibilityLabel={formatLong(d)}>
               <T variant="small" style={on ? { color: 'rgba(255,255,255,0.8)' } : undefined}>{WEEKDAYS_SHORT[i]}</T>
               <T style={[st.dayNum, on && { color: colors.white }, d === today && !on && { color: colors.leafDark }]}>{dayNum(d)}</T>
               <View style={[st.dot, { opacity: count ? 1 : 0 }, on && { backgroundColor: colors.lime }, exam && { backgroundColor: MARK_STYLE.exam.color, width: 7, height: 7, borderRadius: 4 }]} />
@@ -161,15 +170,32 @@ function WeekView() {
           );
         })}
       </View>
-      {today && selected !== today && (
-        <Pressable onPress={() => setSelected(today)} style={{ alignSelf: 'center' }}><T style={{ color: colors.leafDark, fontFamily: font.bold }}>Zu heute</T></Pressable>
-      )}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <T style={{ fontFamily: font.bold }}>{today ? relativeDay(selected, today) : formatLong(selected)}</T>
+        {today && selected !== today && <Pressable onPress={() => setSelected(today)} hitSlop={8}><T style={{ color: colors.leafDark, fontFamily: font.bold }}>Zu heute</T></Pressable>}
+      </View>
       <ErrorBox text={error} />
-      <Card style={{ gap: 10 }}>
-        <T variant="h2">{today ? relativeDay(selected, today) : formatLong(selected)}</T>
-        {items && !dayItems.length && <T variant="muted">Nichts eingetragen.</T>}
-        {dayItems.map(i => <ItemRow key={i.key} item={i} />)}
-      </Card>
+    </View>
+  );
+
+  if (mode === 'tag') {
+    return (
+      <View style={{ flex: 1 }}>
+        {header}
+        <DayView date={selected} today={today ?? selected} items={dayItems} onOpen={open} onSwipe={swipe}
+          onCreate={(date, start) => router.push({ pathname: '/neuer-termin', params: { date, start } })} />
+      </View>
+    );
+  }
+  return (
+    <ScrollView contentContainerStyle={{ paddingBottom: 120 }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.leaf} />}>
+      {header}
+      <View style={{ paddingHorizontal: 16 }}>
+        <Card style={{ gap: 10 }}>
+          {items && !dayItems.length && <T variant="muted">Nichts eingetragen.</T>}
+          {dayItems.map(i => <ItemRow key={i.key} item={i} onPress={() => open(i)} />)}
+        </Card>
+      </View>
     </ScrollView>
   );
 }

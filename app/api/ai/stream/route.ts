@@ -5,6 +5,7 @@ import { InputError } from '@/lib/validate';
 
 // the agent may call the model several times per message (and think before each step)
 export const maxDuration = 120;
+export const dynamic = 'force-dynamic';
 
 /** Website: one CLOQI AI message, answer streamed (session cookie; same-origin only, see middleware). */
 export async function POST(req: Request) {

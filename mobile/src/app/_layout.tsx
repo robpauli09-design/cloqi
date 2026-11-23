@@ -29,6 +29,7 @@ function Routes() {
         <Stack.Protected guard={signedIn && onboarded}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="neuer-termin" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="termin" options={{ presentation: 'modal' }} />
         </Stack.Protected>
         <Stack.Protected guard={signedIn && !onboarded}>
           <Stack.Screen name="onboarding" />

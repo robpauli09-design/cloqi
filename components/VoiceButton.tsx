@@ -1,61 +1,55 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff } from 'lucide-react';
-
-type Recognition = {
-  lang: string; interimResults: boolean; continuous: boolean;
-  onresult: ((e: { results: ArrayLike<ArrayLike<{ transcript: string }> & { isFinal: boolean }> }) => void) | null;
-  onend: (() => void) | null; onerror: ((e: { error: string }) => void) | null;
-  start: () => void; stop: () => void;
-};
+import { useState } from 'react';
+import { Check, Loader2, Mic, X } from 'lucide-react';
+import { transcribeAction } from '@/app/actions/ai';
+import { toast } from './Toaster';
+import { useRecorder } from './useRecorder';
 
 /**
- * Voice input via the browser's speech recognition (Chrome, Edge, Safari).
- * Audio is processed by the browser/OS vendor; CLOQI only receives the recognised text.
+ * Voice input: records in the browser and transcribes on the server – the same way as the
+ * CLOQI AI chat (works on iPhone/Safari too, unlike the browser's own speech recognition).
+ * Tap to start, ✓ to finish (text is passed to onText/onFinal), ✕ to discard.
  */
 export function VoiceButton({ onText, onFinal, size = 44 }: { onText: (t: string) => void; onFinal?: (t: string) => void; size?: number }) {
-  const [listening, setListening] = useState(false);
-  const [supported, setSupported] = useState(true);
-  const rec = useRef<Recognition | null>(null);
+  const voice = useRecorder();
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const W = window as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition };
-    const Ctor = W.SpeechRecognition ?? W.webkitSpeechRecognition;
-    if (!Ctor) { setSupported(false); return; }
-    const r = new Ctor();
-    r.lang = 'de-AT';
-    r.interimResults = true;
-    r.continuous = false;
-    let finalText = '';
-    r.onresult = e => {
-      const text = Array.from(e.results).map(x => x[0].transcript).join(' ');
-      onText(text);
-      if (e.results[e.results.length - 1].isFinal) finalText = text;
-    };
-    r.onend = () => { setListening(false); if (finalText && onFinal) onFinal(finalText); finalText = ''; };
-    r.onerror = () => setListening(false);
-    rec.current = r;
-    return () => r.stop();
-  }, [onText, onFinal]);
+  const start = async () => {
+    try { await voice.start(); } catch (e) {
+      toast(e instanceof Error && e.name !== 'NotAllowedError' ? e.message : 'Bitte erlaube den Zugriff aufs Mikrofon.', 'error');
+    }
+  };
+  const finish = async () => {
+    const blob = await voice.stop();
+    if (!blob) return;
+    setBusy(true);
+    const form = new FormData();
+    form.set('audio', new File([blob], blob.type.includes('mp4') ? 'aufnahme.mp4' : blob.type.includes('ogg') ? 'aufnahme.ogg' : 'aufnahme.webm', { type: blob.type }));
+    const r = await transcribeAction(form);
+    setBusy(false);
+    if (r.ok && r.text) { onText(r.text); onFinal?.(r.text); } else toast(r.error ?? 'Spracherkennung fehlgeschlagen.', 'error');
+  };
 
-  if (!supported) {
+  if (busy) {
+    return <span className="grid shrink-0 place-items-center rounded-full bg-paper text-leaf" style={{ width: size, height: size }} aria-label="Wird umgewandelt"><Loader2 size={18} className="animate-spin" /></span>;
+  }
+  if (voice.recording) {
     return (
-      <span title="Spracheingabe wird von diesem Browser nicht unterstützt (Chrome, Edge oder Safari verwenden)"
-        className="grid shrink-0 place-items-center rounded-full bg-paper text-ink-faint" style={{ width: size, height: size }}>
-        <MicOff size={18} />
+      <span className="flex shrink-0 items-center gap-1.5">
+        <button type="button" onClick={voice.cancel} aria-label="Aufnahme verwerfen" className="grid h-9 w-9 place-items-center rounded-full text-ink-soft hover:bg-paper"><X size={17} /></button>
+        <span className="flex h-8 items-center gap-[2px]" aria-hidden>
+          {voice.levels.slice(-12).map((l, i) => <span key={i} className="w-[3px] rounded-full bg-leaf-dark" style={{ height: `${Math.round(5 + l * 22)}px`, opacity: 0.4 + l * 0.6 }} />)}
+        </span>
+        <button type="button" onClick={() => void finish()} aria-label="Aufnahme fertig"
+          className="grid shrink-0 place-items-center rounded-full bg-leaf-dark text-white" style={{ width: size, height: size }}><Check size={18} /></button>
       </span>
     );
   }
   return (
-    <button
-      type="button" aria-label={listening ? 'Zuhören beenden' : 'Sprechen'} aria-pressed={listening}
-      onClick={() => { if (listening) rec.current?.stop(); else { try { rec.current?.start(); setListening(true); } catch { setListening(false); } } }}
-      className={`relative grid shrink-0 place-items-center rounded-full transition ${listening ? 'bg-danger text-white' : 'bg-lime text-leaf-deep hover:bg-leaf hover:text-white'}`}
-      style={{ width: size, height: size }}
-    >
-      {listening && <span className="absolute inset-0 animate-ping rounded-full bg-danger/40" />}
-      <Mic size={18} className="relative" />
+    <button type="button" onClick={() => void start()} aria-label="Sprechen" title="Sprechen"
+      className="grid shrink-0 place-items-center rounded-full bg-lime text-leaf-deep transition hover:bg-leaf hover:text-white" style={{ width: size, height: size }}>
+      <Mic size={18} />
     </button>
   );
 }

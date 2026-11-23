@@ -26,7 +26,7 @@ const STARTERS: { icon: React.ComponentProps<typeof Ionicons>['name']; label: st
 const BARS = 28;
 const MAX_RECORD_MS = 180_000;
 
-type Msg = ChatMessage & { actions?: string[]; failed?: boolean; status?: string; streaming?: boolean };
+type Msg = ChatMessage & { actions?: string[]; failed?: boolean; status?: string; streaming?: boolean; steps?: string[] };
 interface Thread { id: string; title: string; updatedAt: string }
 
 export default function Ai() {
@@ -98,7 +98,11 @@ export default function Ai() {
     try {
       await apiStream('/ai/stream', { message, threadId, attachments: sending.map(({ name, mime, data }) => ({ name, mime, data })) }, e => {
         if (e.type === 'thread') { tid = e.id; setThreadId(e.id); }
-        else if (e.type === 'status') patch(m => ({ ...m, status: e.text }));
+        else if (e.type === 'status') patch(m => ({
+          ...m, status: e.text,
+          // keep every real step visible (like Claude/ChatGPT), not just the latest flash
+          steps: e.text === 'Denkt nach …' || m.steps?.[m.steps.length - 1] === e.text ? m.steps : [...(m.steps ?? []), e.text],
+        }));
         else if (e.type === 'delta') patch(m => ({ ...m, content: m.content + e.text, status: undefined }));
         else if (e.type === 'reset') patch(m => ({ ...m, content: '' }));
         else if (e.type === 'done') {
@@ -225,8 +229,21 @@ export default function Ai() {
           }
           renderItem={({ item }) => (
             <View style={[st.bubble, item.role === 'user' ? st.mine : st.theirs, item.failed && { backgroundColor: colors.dangerSoft }]}>
+              {!!item.steps?.length && (
+                <View style={[{ gap: 3 }, item.content ? { marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.line } : { marginBottom: 4 }]}>
+                  {item.steps.map((stp, si) => {
+                    const working = item.streaming && !item.content && si === item.steps!.length - 1 && item.status === stp;
+                    return (
+                      <View key={si} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                        {working ? <ActivityIndicator size="small" color={colors.leaf} /> : <Ionicons name="checkmark" size={14} color={colors.leafDark} />}
+                        <T variant="small">{working ? stp : stp.replace(/ …$/, '')}</T>
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
               {item.streaming && !item.content
-                ? <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}><ActivityIndicator color={colors.leaf} /><T variant="muted">{item.status ?? 'Denkt nach …'}</T></View>
+                ? (item.status === 'Denkt nach …' || !item.steps?.length) ? <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}><ActivityIndicator color={colors.leaf} /><T variant="muted">{item.status ?? 'Denkt nach …'}</T></View> : null
                 : item.role === 'user'
                   ? <T style={{ color: colors.white }}>{item.content}</T>
                   : <ChatMarkdown text={item.content} cursor={item.streaming} />}

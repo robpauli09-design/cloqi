@@ -3,6 +3,7 @@
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 import { createSession, destroySession } from '@/lib/auth';
+import { lastPath } from '@/lib/last-path';
 import { clientIp, loginOrRegister } from '@/lib/login';
 import { InputError } from '@/lib/validate';
 
@@ -14,7 +15,7 @@ export async function authenticate(_prev: AuthState, form: FormData): Promise<Au
   try {
     const { user, isNew } = await loginOrRegister(mode, String(form.get('email') ?? ''), String(form.get('password') ?? ''), clientIp(await headers()));
     await createSession(user.id);
-    target = isNew ? '/onboarding' : user.onboarded ? '/dashboard' : '/onboarding';
+    target = isNew ? '/onboarding' : user.onboarded ? await lastPath() : '/onboarding';
   } catch (e) {
     return { mode, error: e instanceof InputError ? e.message : 'Anmeldung gerade nicht möglich. Bitte später erneut versuchen.' };
   }

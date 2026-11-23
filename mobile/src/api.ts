@@ -36,6 +36,9 @@ export interface Item {
   description: string | null;
   readOnly: boolean;
   calendarLabel: string;
+  source: string;
+  recurring: boolean;
+  occurrenceDate: string | null;  // set for one occurrence of a repeating event
   date: string;   // YYYY-MM-DD in the user's time zone
   start: string;  // HH:MM
   end: string;
@@ -122,7 +125,7 @@ export async function apiStream(path: string, body: unknown, onEvent: (e: Stream
   try {
     res = await fetch(`${API_URL}/api/mobile${path}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       body: JSON.stringify(body),
     });
   } catch {
@@ -130,7 +133,8 @@ export async function apiStream(path: string, body: unknown, onEvent: (e: Stream
   }
   if (res.status === 401 && token) onUnauthorized?.();
   if (!res.ok) throw new ApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Fehler ${res.status}`, res.status);
-  const handle = (line: string) => { const l = line.trim(); if (l) { try { onEvent(JSON.parse(l) as StreamEvent); } catch { /* ignore */ } } };
+  // Server-Sent Events: one `data: {json}` line per event; comments (padding) start with ':'
+  const handle = (line: string) => { const l = line.trim(); if (l.startsWith('data:')) { try { onEvent(JSON.parse(l.slice(5)) as StreamEvent); } catch { /* ignore */ } } };
   const reader = res.body?.getReader?.();
   if (!reader || typeof TextDecoder === 'undefined') { (await res.text()).split('\n').forEach(handle); return; }
   const dec = new TextDecoder();

@@ -14,7 +14,7 @@ import { MascotAvatar, type MascotName } from '@/components/Mascot';
 import { toast, toastResult } from '@/components/Toaster';
 import { useRecorder } from '@/components/useRecorder';
 
-interface Msg { id: string | number; from: 'user' | 'cloqi'; text: string; proposal?: Proposal; confirmLabel?: string; resolved?: boolean; actions?: string[]; error?: boolean; status?: string; streaming?: boolean }
+interface Msg { id: string | number; from: 'user' | 'cloqi'; text: string; proposal?: Proposal; confirmLabel?: string; resolved?: boolean; actions?: string[]; error?: boolean; status?: string; streaming?: boolean; steps?: string[] }
 type StreamEvent = { type: 'thread'; id: string } | { type: 'status'; text: string } | { type: 'delta'; text: string } | { type: 'reset' } | { type: 'done'; ok: boolean; reply: string; actions: string[]; threadId: string | null };
 interface Attachment { name: string; mime: string; data: string; preview?: string }
 interface Thread { id: string; title: string; updatedAt: string }
@@ -153,10 +153,14 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
             while ((i = buf.indexOf('\n')) >= 0) {
               const line = buf.slice(0, i).trim();
               buf = buf.slice(i + 1);
-              if (!line) continue;
-              const e = JSON.parse(line) as StreamEvent;
+              if (!line.startsWith('data:')) continue; // SSE: skip comments/padding
+              const e = JSON.parse(line.slice(5)) as StreamEvent;
               if (e.type === 'thread') { setThreadId(e.id); remember(e.id); }
-              else if (e.type === 'status') patch(m => ({ ...m, status: e.text }));
+              else if (e.type === 'status') patch(m => ({
+                ...m, status: e.text,
+                // keep every real step visible (like Claude/ChatGPT), not just the latest flash
+                steps: e.text === 'Denkt nach …' || m.steps?.[m.steps.length - 1] === e.text ? m.steps : [...(m.steps ?? []), e.text],
+              }));
               else if (e.type === 'delta') patch(m => ({ ...m, text: m.text + e.text, status: undefined }));
               else if (e.type === 'reset') patch(m => ({ ...m, text: '' }));
               else if (e.type === 'done') {
@@ -275,8 +279,21 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
           <div key={m.id} className="flex items-end gap-2">
             <MascotAvatar name={mascot} size={32} />
             <div className={`max-w-[85%] animate-rise rounded-2xl rounded-bl-md border px-4 py-3 text-sm shadow-card ${m.error ? 'border-danger/30 bg-danger-soft/60' : 'border-line bg-white'}`}>
+              {m.steps && m.steps.length > 0 && (
+                <ul className={`space-y-0.5 text-xs text-ink-faint ${m.text ? 'mb-2 border-b border-line pb-2' : 'mb-1'}`}>
+                  {m.steps.map((st, si) => {
+                    const working = m.streaming && !m.text && si === m.steps!.length - 1 && m.status === st;
+                    return (
+                      <li key={si} className="flex items-center gap-1.5">
+                        {working ? <Loader2 size={12} className="animate-spin text-leaf" /> : <Check size={12} className="text-leaf-dark" />}
+                        {working ? st : st.replace(/ …$/, '')}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
               {m.streaming && !m.text
-                ? <p className="flex items-center gap-2 text-xs text-ink-soft"><Loader2 size={14} className="animate-spin text-leaf" />{m.status ?? 'Denkt nach …'}</p>
+                ? (m.status === 'Denkt nach …' || !m.steps?.length) && <p className="flex items-center gap-2 text-xs text-ink-soft"><Loader2 size={14} className="animate-spin text-leaf" />{m.status ?? 'Denkt nach …'}</p>
                 : <>
                   {/* the AI writes light Markdown (**bold**, lists) – render it instead of showing the stars */}
                   <Markdown text={m.text} compact onLink={target => router.push(`/vault?file=${encodeURIComponent(target)}`)} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Plus, Sparkles } from 'lucide-react';
@@ -17,7 +17,7 @@ import { EventDialog, type DialogState } from './EventDialog';
 export type CalendarView = 'day' | 'week' | 'month' | 'agenda';
 
 export interface CalendarAppProps {
-  view: CalendarView; date: string; today: string; tz: string; filter: string; rangeFrom: string; rangeTo: string;
+  view: CalendarView; explicitView?: boolean; date: string; today: string; tz: string; filter: string; rangeFrom: string; rangeTo: string;
   items: CalendarItem[]; calendars: UserCalendar[]; mascot: MascotName; reminderDefault: number;
 }
 
@@ -27,6 +27,22 @@ export function CalendarApp(props: CalendarAppProps) {
   const { view, date, today, tz, items, calendars } = props;
   const router = useRouter();
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  // phones open the day view (like Google Calendar) unless a view was chosen explicitly
+  useEffect(() => {
+    if (!props.explicitView && view === 'week' && window.matchMedia('(max-width: 1023px)').matches) router.replace(`/calendar?view=day&date=${date}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // swipe left/right in the day view = next/previous day
+  const touch = useRef<{ x: number; y: number } | null>(null);
+  const swipe = {
+    onTouchStart: (e: React.TouchEvent) => { touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY }; },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const t = touch.current; touch.current = null;
+      if (!t || view !== 'day') return;
+      const dx = e.changedTouches[0].clientX - t.x, dy = e.changedTouches[0].clientY - t.y;
+      if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 2) step(dx < 0 ? 1 : -1);
+    },
+  };
   const go = (params: Record<string, string>) => router.push(`/calendar?${new URLSearchParams({ view, date, ...params })}`);
   const conflictKeys = useMemo(() => {
     const s = new Set<string>();
@@ -63,12 +79,12 @@ export function CalendarApp(props: CalendarAppProps) {
     <div className="flex gap-6">
       <CalendarSidebar calendars={calendars} today={today} date={date} />
       <div className="min-w-0 flex-1">
-        <header className="mb-4 flex flex-wrap items-center gap-3">
+        <header className="mb-4 flex flex-wrap items-center gap-2 lg:gap-3">
           <div className="mr-auto min-w-0">
-            <p className="eyebrow">Kalender</p>
-            <h1 className="h1 truncate">{title}</h1>
+            <p className="eyebrow hidden lg:block">Kalender</p>
+            <h1 className="truncate font-display text-xl font-semibold lg:text-3xl">{title}</h1>
           </div>
-          <div className="flex rounded-xl border border-line bg-white p-1 text-sm font-semibold" role="tablist" aria-label="Ansicht">
+          <div className="order-last flex w-full rounded-xl border border-line bg-white p-1 text-sm font-semibold lg:order-none lg:w-auto [&>button]:flex-1 lg:[&>button]:flex-none" role="tablist" aria-label="Ansicht">
             {(Object.keys(VIEW_LABEL) as CalendarView[]).map(v => (
               <button key={v} role="tab" aria-selected={view === v} onClick={() => router.push(`/calendar?view=${v}&date=${date}`)}
                 className={`rounded-lg px-3 py-1.5 transition ${view === v ? 'bg-leaf-dark text-white' : 'text-ink-soft hover:text-ink'}`}>{VIEW_LABEL[v]}</button>
@@ -81,13 +97,18 @@ export function CalendarApp(props: CalendarAppProps) {
               <button className="btn-outline btn-sm h-9 w-9 !p-0" aria-label="Weiter" onClick={() => step(1)}><ChevronRight size={16} /></button>
             </div>
           )}
-          <Link href="/ai" className="btn-outline h-10"><Sparkles size={16} className="text-ai" /> KI-Planung</Link>
-          <button className="btn-primary h-10" onClick={() => openCreate(view === 'day' ? date : date < today && view !== 'month' ? date : today)}>
+          <Link href="/ai" className="btn-outline hidden h-10 lg:inline-flex"><Sparkles size={16} className="text-ai" /> KI-Planung</Link>
+          <button className="btn-primary hidden h-10 lg:inline-flex" onClick={() => openCreate(view === 'day' ? date : date < today && view !== 'month' ? date : today)}>
             <Plus size={16} /> Neuer Termin
+          </button>
+          {/* phone: round + button like Google Calendar */}
+          <button className="fixed bottom-28 right-5 z-30 grid h-14 w-14 place-items-center rounded-full bg-leaf-dark text-white shadow-lift active:scale-95 lg:hidden"
+            aria-label="Neuer Termin" onClick={() => openCreate(view === 'day' ? date : date < today && view !== 'month' ? date : today)}>
+            <Plus size={26} />
           </button>
         </header>
 
-        <details className="card mb-4 p-4 xl:hidden">
+        <details className="card mb-4 hidden p-4 lg:block xl:hidden">
           <summary className="cursor-pointer text-sm font-semibold">Kalender & Kategorien ein-/ausblenden</summary>
           <div className="mt-3"><CalendarList calendars={calendars} /></div>
         </details>
@@ -97,7 +118,7 @@ export function CalendarApp(props: CalendarAppProps) {
             conflictKeys={conflictKeys} onOpen={openItem} onCreate={openCreate} />
         )}
         {view === 'day' && (
-          <TimeGrid days={[date]} items={items} today={today} tz={tz} conflictKeys={conflictKeys} onOpen={openItem} onCreate={openCreate} detailed />
+          <div {...swipe}><TimeGrid days={[date]} items={items} today={today} tz={tz} conflictKeys={conflictKeys} onOpen={openItem} onCreate={openCreate} detailed /></div>
         )}
         {view === 'month' && (
           <MonthView month={date.slice(0, 7)} gridStart={props.rangeFrom} items={items} today={today} tz={tz}

@@ -13,7 +13,7 @@ import { RECURRENCE_PRESETS } from '@/lib/recurrence';
 import { isValidDate, isValidTime, utcToZoned, zonedToUtc } from '@/lib/time';
 import type { CalendarEvent, CalendarItem, User } from '@/lib/types';
 import { category, fail, InputError, optionalText, text, time, type ActionResult } from '@/lib/validate';
-import { conflictWarning, createEventFor, readEventForm } from '@/lib/event-input';
+import { conflictWarning, createEventFor, deleteEventFor, eventDetailsFor, readEventForm, updateEventFor, type EventDetails } from '@/lib/event-input';
 
 const EXTERNAL = ['google', 'outlook'];
 const IMPORT_ONLY = ['webuntis', 'ics'];
@@ -37,50 +37,14 @@ export async function createEventAction(_prev: ActionResult | null, form: FormDa
 export async function updateEventAction(id: string, scope: 'single' | 'series', occurrenceDate: string | null, _prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const existing = await getEvent(user.id, id);
-    if (!existing) throw new InputError('Termin nicht gefunden.');
-    if (IMPORT_ONLY.includes(existing.source)) throw new InputError('Dieser Termin stammt aus WebUntis bzw. einer importierten Datei und bleibt dort maßgeblich.');
-    const e = await readEventForm(user, form);
-    const external = EXTERNAL.includes(existing.source);
-    if (external) {
-      // keep it in its external calendar; mark for upload on the next sync
-      await updateEvent(user.id, id, { ...e, calendarId: existing.calendarId, recurrenceFreq: null, syncState: 'dirty' });
-      return done('Gespeichert. Die Änderung wird an den verbundenen Kalender übertragen.');
-    }
-    if (existing.recurrenceFreq && scope === 'single' && occurrenceDate) {
-      await updateEvent(user.id, id, { exdates: [...new Set([...existing.exdates, occurrenceDate])] });
-      await createEvent(user.id, { ...e, recurrenceFreq: null, seriesId: existing.id, source: existing.source });
-    } else if (existing.recurrenceFreq && scope === 'series') {
-      const first = utcToZoned(existing.startAt, user.timezone).date;
-      const newStart = utcToZoned(e.startAt, user.timezone).time;
-      const duration = Date.parse(e.endAt) - Date.parse(e.startAt);
-      const startAt = zonedToUtc(first, newStart, user.timezone).toISOString();
-      await updateEvent(user.id, id, { ...e, startAt, endAt: new Date(Date.parse(startAt) + duration).toISOString() });
-    } else {
-      await updateEvent(user.id, id, e);
-    }
-    return done(e.allDay ? 'Gespeichert.' : await conflictWarning(user, e.startAt, e.endAt, id) ?? 'Gespeichert.');
+    return done(await updateEventFor(user, id, scope, occurrenceDate, form));
   } catch (e) { return fail(e); }
 }
 
 export async function deleteEventAction(id: string, scope: 'single' | 'series' = 'series', occurrenceDate: string | null = null): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const existing = await getEvent(user.id, id);
-    if (!existing) throw new InputError('Termin nicht gefunden.');
-    if (IMPORT_ONLY.includes(existing.source)) throw new InputError('Dieser Termin wird in seiner Quelle (WebUntis bzw. Datei) verwaltet.');
-    if (EXTERNAL.includes(existing.source) && existing.externalUid) {
-      const cal = existing.calendarId ? await getCalendar(user.id, existing.calendarId) : null;
-      if (!cal?.writable) throw new InputError('Für diesen Kalender fehlt die Schreibberechtigung.');
-      const { calendarId, id: remoteId } = splitExternalUid(existing.externalUid);
-      await deleteRemote(user, existing.source as OAuthProvider, calendarId, remoteId);
-    }
-    if (existing.recurrenceFreq && scope === 'single' && occurrenceDate) {
-      await updateEvent(user.id, id, { exdates: [...new Set([...existing.exdates, occurrenceDate])] });
-      return done('Dieser Termin wurde aus der Serie entfernt.');
-    }
-    await deleteEvent(user.id, id);
-    return done(existing.recurrenceFreq ? 'Die ganze Serie wurde gelöscht.' : 'Termin gelöscht.');
+    return done(await deleteEventFor(user, id, scope, occurrenceDate));
   } catch (e) { return fail(e); }
 }
 
@@ -152,28 +116,12 @@ export async function deleteBlockAction(id: string): Promise<ActionResult> {
   } catch (e) { return fail(e); }
 }
 
-export interface EventDetails {
-  id: string; title: string; description: string | null; date: string; start: string; end: string; allDay: boolean;
-  category: CalendarEvent['category']; calendarId: string | null; location: string | null; reminderMinutes: number | null;
-  repeat: string; repeatInterval: number; repeatUnit: string; until: string | null; source: string; recurring: boolean;
-}
+export type { EventDetails } from '@/lib/event-input';
 
 /** Event fields for the edit form (in the user's time zone). */
 export async function getEventDetails(id: string, occurrenceDate: string | null): Promise<EventDetails | null> {
   const user = await requireUser();
-  const e = await getEvent(user.id, id);
-  if (!e) return null;
-  const s = utcToZoned(e.startAt, user.timezone);
-  const en = utcToZoned(e.endAt, user.timezone);
-  const preset = !e.recurrenceFreq ? 'none'
-    : e.recurrenceFreq === 'weekly' && e.recurrenceInterval === 2 ? 'biweekly'
-    : e.recurrenceInterval === 1 ? e.recurrenceFreq : 'custom';
-  return {
-    id: e.id, title: e.title, description: e.description, date: occurrenceDate ?? s.date, start: s.time, end: en.time, allDay: e.allDay,
-    category: e.category, calendarId: e.calendarId, location: e.location, reminderMinutes: e.reminderMinutes,
-    repeat: preset, repeatInterval: e.recurrenceInterval, repeatUnit: e.recurrenceFreq ?? 'weekly', until: e.recurrenceUntil,
-    source: e.source, recurring: e.recurrenceFreq !== null,
-  };
+  return eventDetailsFor(user, id, occurrenceDate);
 }
 
 /** Life routines: one weekly series per selected weekday (e.g. training Tue + Thu). */

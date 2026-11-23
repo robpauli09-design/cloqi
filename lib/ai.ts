@@ -2,8 +2,7 @@ import 'server-only';
 import { busyIntervals, dayRange, getCalendarItems, mainCalendarId } from './calendar';
 import { applyPlan, proposePlan } from './planning';
 import {
-  addChat, createEvent, createThread, deleteEvent, getBlock, getCalendar, getEvent, getThread, getVaultFile, listChat, listTasks, logAiAction,
-  searchVault, updateBlock, updateEvent, updateUser, writeVaultFile,
+  addChat, createEvent, createThread, deleteBlocks, deleteEvent, deleteTask, getBlock, getCalendar, getEvent, getTask, getThread, getVaultFile, listChat, listTasks, listVaultFiles, logAiAction, searchVault, setTaskStatus, updateBlock, updateEvent, updateTask, updateUser, writeVaultFile,
 } from './repo';
 import { freeSlots } from './scheduler';
 import { createTaskFor } from './tasks';
@@ -38,6 +37,8 @@ interface Ctx {
   emit?: (e: StreamEvent) => void;
   /** true when the final answer was already sent as text deltas */
   streamed?: boolean;
+  /** CLOQI's previous message in this chat (to understand a short "ja") */
+  lastAssistant?: string;
 }
 
 /** What a streaming client receives while CLOQI works (NDJSON lines, see lib/ai-stream.ts). */
@@ -52,13 +53,18 @@ const TOOL_STATUS: Record<string, string> = {
   get_calendar: 'Schaut in deinen Kalender …', create_event: 'Trägt den Termin ein …', update_event: 'Verschiebt den Termin …',
   delete_event: 'Löscht den Termin …', add_task: 'Trägt den Test ein und plant Lernblöcke …', replan_study: 'Plant deine Lernzeit neu …',
   update_study_block: 'Passt den Lernblock an …', find_free_time: 'Sucht freie Zeit …', set_subject: 'Merkt sich dein Fach …',
+  search_calendar: 'Sucht im Kalender …', update_task: 'Verschiebt den Test …', delete_task: 'Löscht den Test …',
+  delete_study_block: 'Entfernt den Lernblock …',
   vault_read: 'Liest in deinem Wissen …', vault_search: 'Sucht in deinem Wissen …', vault_write: 'Merkt sich das …',
 };
 const toolStatus = (name: string) => TOOL_STATUS[name] ?? 'Ich erledige das …';
 
 // Deleting is only allowed when the user's own chat message asks for it – instructions hidden in
 // imported calendar titles or vault files can never trigger a deletion on their own.
-const DELETE_INTENT = /l[öo]sch|entfern|absag|sag\S* .*\bab\b|streich|storn|\bweg\b|cancel|delete|remove/i;
+const DELETE_INTENT = /l[öo]sch|entfern|absag|sag\S* .*\bab\b|streich|storn|\bweg\b|raus(nehm|werf|tun|geb)|fällt (doch )?(aus|weg)|findet nicht statt|nicht mehr|brauch\S* .*nicht|cancel|delete|remove/i;
+/** "ja" / "passt" / "mach" … – counts as consent when CLOQI's previous message asked about deleting. */
+const YES = /^\s*(ja|jo|jap|jep|yes|ok(ay)?|passt|gerne?|bitte|mach( das| es)?|klar|sicher|genau|richtig|stimmt|korrekt|unbedingt)\b/i;
+const deleteAllowed = (ctx: Ctx) => DELETE_INTENT.test(ctx.userMessage) || (YES.test(ctx.userMessage) && DELETE_INTENT.test(ctx.lastAssistant ?? ''));
 
 /** Imported text (event titles etc.) as a single-line quoted string, so it cannot break out of its data block. */
 const quoted = (s: string, max = 80) => JSON.stringify([...s].map(c => { const n = c.charCodeAt(0); return n < 32 || n === 127 || n === 0x2028 || n === 0x2029 ? ' ' : c; }).join('').trim().slice(0, max));
@@ -78,6 +84,19 @@ const S = (props: Json, required: string[] = []) => ({ type: 'object', propertie
 const DATE = { type: 'string', description: 'YYYY-MM-DD' };
 const TIME = { type: 'string', description: 'HH:MM (24h)' };
 
+/** One calendar entry for the model, incl. which tool can change it (avoids wrong-tool errors). */
+function calendarEntry(i: Awaited<ReturnType<typeof getCalendarItems>>[number], tz: string) {
+  const change = i.readOnly || i.kind === 'lesson' ? 'nicht änderbar (Import/Stundenplan)'
+    : i.kind === 'study' ? `update_study_block/delete_study_block(block_id="${i.id}")`
+    : i.kind === 'deadline' ? `update_task/delete_task(task_id="${i.id}")`
+    : `update_event/delete_event(event_id="${i.id}"${i.occurrenceDate ? `, occurrence_date="${i.occurrenceDate}" für nur diesen Termin` : ''})`;
+  return {
+    id: i.id, kind: i.kind, title: i.title, date: utcToZoned(i.startAt, tz).date,
+    start: i.allDay ? null : utcToZoned(i.startAt, tz).time, end: i.allDay ? null : utcToZoned(i.endAt, tz).time,
+    category: i.category, status: i.status, calendar: i.calendarLabel, recurring: i.recurring, occurrence_date: i.occurrenceDate, change,
+  };
+}
+
 const TOOLS: ToolDef[] = [
   {
     name: 'get_calendar',
@@ -87,11 +106,7 @@ const TOOLS: ToolDef[] = [
       const from = str(a.from_date), to = str(a.to_date);
       need(isValidDate(from) && isValidDate(to) && to >= from, 'Ungültiger Zeitraum.');
       const items = await getCalendarItems(user, zonedToUtc(from, '00:00', user.timezone).toISOString(), zonedToUtc(addDays(to > addDays(from, 31) ? addDays(from, 31) : to, 1), '00:00', user.timezone).toISOString(), { includeHidden: true });
-      return items.slice(0, 150).map(i => ({
-        id: i.id, kind: i.kind, title: i.title, date: utcToZoned(i.startAt, user.timezone).date,
-        start: i.allDay ? null : utcToZoned(i.startAt, user.timezone).time, end: i.allDay ? null : utcToZoned(i.endAt, user.timezone).time,
-        category: i.category, status: i.status, calendar: i.calendarLabel, editable: !i.readOnly, recurring: i.recurring, occurrence_date: i.occurrenceDate,
-      }));
+      return items.slice(0, 150).map(i => calendarEntry(i, user.timezone));
     },
   },
   {
@@ -160,7 +175,7 @@ const TOOLS: ToolDef[] = [
     run: async (user, a, ctx) => {
       const ev = await getEvent(user.id, str(a.event_id, 60));
       need(ev, 'Termin nicht gefunden.');
-      need(DELETE_INTENT.test(ctx.userMessage), 'Löschen nur, wenn der Nutzer es in seiner Nachricht ausdrücklich verlangt. Frag ihn zuerst.');
+      need(deleteAllowed(ctx), 'Löschen nur, wenn der Nutzer es ausdrücklich verlangt. Frag ihn kurz („Soll ich … löschen?“) – ein „Ja“ reicht dann.');
       need(['manual', 'assistant'].includes(ev!.source), 'Nur selbst angelegte CLOQI-Termine können gelöscht werden.');
       const occ = optStr(a.occurrence_date);
       if (ev!.recurrenceFreq && occ) await updateEvent(user.id, ev!.id, { exdates: [...new Set([...ev!.exdates, occ])] });
@@ -227,6 +242,74 @@ const TOOLS: ToolDef[] = [
         await log(user, ctx, 'Lernblock verschoben', `→ ${formatDateDe(date, { weekday: true })} ${start}`);
       }
       return { ok: true };
+    },
+  },
+  {
+    name: 'delete_study_block',
+    description: 'Einen geplanten Lernblock löschen (z. B. „heute keinen Lernblock“).',
+    parameters: S({ block_id: { type: 'string' } }, ['block_id']),
+    run: async (user, a, ctx) => {
+      const b = await getBlock(user.id, str(a.block_id, 60));
+      need(b, 'Lernblock nicht gefunden.');
+      need(deleteAllowed(ctx), 'Löschen nur, wenn der Nutzer es ausdrücklich verlangt. Frag ihn kurz – ein „Ja“ reicht dann.');
+      await deleteBlocks(user.id, [b!.id]);
+      await log(user, ctx, 'Lernblock gelöscht', `${formatDateDe(utcToZoned(b!.startAt, user.timezone).date, { weekday: true })} ${utcToZoned(b!.startAt, user.timezone).time}`);
+      return { ok: true };
+    },
+  },
+  {
+    name: 'update_task',
+    description: 'Einen eingetragenen Test/Schularbeit/Hausübung ändern: neues Datum/Uhrzeit (verschoben), Fach, Stoff, oder als erledigt markieren. Plant die Lernblöcke danach automatisch neu.',
+    parameters: S({ task_id: { type: 'string' }, date: DATE, time: TIME, subject: { type: 'string' }, topic: { type: 'string' }, done: { type: 'boolean' } }, ['task_id']),
+    run: async (user, a, ctx) => {
+      const t = await getTask(user.id, str(a.task_id, 60));
+      need(t, 'Test/Aufgabe nicht gefunden – nutze die task_id aus get_calendar oder search_calendar.');
+      if (a.done === true || a.done === false) {
+        await setTaskStatus(user.id, t!.id, a.done ? 'done' : 'open');
+        await log(user, ctx, a.done ? 'Test erledigt' : 'Test wieder offen', t!.title);
+        if (a.done) return { ok: true };
+      }
+      const z = utcToZoned(t!.dueAt, user.timezone);
+      const date = optStr(a.date) ?? z.date, time = optStr(a.time) ?? z.time;
+      need(isValidDate(date) && isValidTime(time), 'Datum oder Uhrzeit ungültig.');
+      const subject = optStr(a.subject, 60) ?? t!.subject;
+      const topic = optStr(a.topic, 100);
+      await updateTask(user.id, t!.id, {
+        dueAt: zonedToUtc(date, time, user.timezone).toISOString(), subject,
+        title: topic || subject !== t!.subject ? `${TASK_KIND_LABELS[t!.kind]} ${subject}${topic ? `: ${topic}` : ''}` : undefined,
+      });
+      const plan = await proposePlan(user, { kind: 'task', taskId: t!.id });
+      await applyPlan(user, plan);
+      await log(user, ctx, 'Test geändert', `${TASK_KIND_LABELS[t!.kind]} ${subject} → ${formatDateDe(date, { weekday: true })} ${time}, Lernplan angepasst`);
+      return { ok: true, new_study_blocks: plan.blocks.length, note: plan.blocks.length ? undefined : 'Die bereits geplanten Lernblöcke reichen weiterhin.' };
+    },
+  },
+  {
+    name: 'delete_task',
+    description: 'Einen eingetragenen Test/Schularbeit/Hausübung samt seinen Lernblöcken löschen (z. B. abgesagt oder falsch eingetragen).',
+    parameters: S({ task_id: { type: 'string' } }, ['task_id']),
+    run: async (user, a, ctx) => {
+      const t = await getTask(user.id, str(a.task_id, 60));
+      need(t, 'Test/Aufgabe nicht gefunden – nutze die task_id aus get_calendar oder search_calendar.');
+      need(deleteAllowed(ctx), 'Löschen nur, wenn der Nutzer es ausdrücklich verlangt. Frag ihn kurz – ein „Ja“ reicht dann.');
+      await deleteTask(user.id, t!.id);
+      await log(user, ctx, 'Test gelöscht', t!.title);
+      return { ok: true };
+    },
+  },
+  {
+    name: 'search_calendar',
+    description: 'Einträge nach Namen suchen (z. B. „Fußball“, „Arzt“, „Mathe“) – 60 Tage zurück bis 120 Tage voraus. Nutze das, bevor du einen Termin änderst oder löschst, den du nicht in der Wochenliste siehst.',
+    parameters: S({ query: { type: 'string' } }, ['query']),
+    run: async (user, a) => {
+      const q = str(a.query, 60).toLowerCase();
+      need(q.length >= 2, 'Suchbegriff zu kurz.');
+      const today = todayIn(user.timezone);
+      const items = await getCalendarItems(user, zonedToUtc(addDays(today, -60), '00:00', user.timezone).toISOString(), zonedToUtc(addDays(today, 120), '00:00', user.timezone).toISOString(), { includeHidden: true });
+      const hits = items.filter(i => `${i.title} ${i.location ?? ''} ${i.description ?? ''}`.toLowerCase().includes(q));
+      // recurring series: show the next occurrences only
+      return hits.filter(i => i.startAt >= new Date(Date.now() - 86400000).toISOString()).slice(0, 25).map(i => calendarEntry(i, user.timezone))
+        .concat(hits.filter(i => i.startAt < new Date(Date.now() - 86400000).toISOString()).slice(-5).map(i => calendarEntry(i, user.timezone)));
     },
   },
   {
@@ -328,6 +411,8 @@ ARBEITSWEISE
 - Tests, Schularbeiten, Prüfungen, Hausübungen, Referate → add_task (plant Lernblöcke automatisch). Sonstige Termine → create_event.
 - Fehlt bei einem normalen Termin die Uhrzeit, frage kurz nach. Bei Tests ohne Uhrzeit nimm 08:00.
 - Termine aus WebUntis, Importen und schreibgeschützten Kalendern nie ändern oder löschen.
+- Bestehendes ändern statt neu anlegen: Will der Nutzer etwas verschieben, umbenennen, absagen oder löschen, finde den Eintrag (Wochenliste unten, get_calendar oder search_calendar) und nutze das Werkzeug aus dessen Feld „change“ – Termine: update_event/delete_event, Tests: update_task/delete_task, Lernblöcke: update_study_block/delete_study_block. Bei Serien (Training jede Woche) frag kurz, ob nur dieser Termin oder alle gemeint sind.
+- Beim Löschen: Wenn der Nutzer es nicht eindeutig gesagt hat, frag kurz nach („Soll ich … löschen?“). Antwortet er mit „Ja“, lösch sofort.
 - Melde Überschneidungen, die ein Werkzeug zurückgibt, ehrlich und schlage eine Lösung vor.
 - Gedächtnis: Wenn du etwas Neues und Dauerhaftes über den Nutzer erfährst (Ziele, Fächer, Training, Gewohnheiten, Vorlieben, wie er lernt), speichere es sofort ohne Nachfrage: kurze Stichpunkte mit vault_write mode=append in user.md; ausführlicheres Wissen in wiki/<thema>.md und halte wiki/index.md aktuell (vorher lesen, dann replace). Fachschwierigkeit zusätzlich mit set_subject.
 - Speichere Gesundheit, Religion, Herkunft und ähnlich sensible Themen nur, wenn der Nutzer es ausdrücklich will.
@@ -345,6 +430,9 @@ ${await read('user.md', 5000)}
 
 === wiki/index.md ===
 ${await read('wiki/index.md', 2000)}
+
+=== Dateien in deinem Wissen (lies sie mit vault_read, wenn sie zur Frage passen) ===
+${(await listVaultFiles(user.id)).map(f => `- ${f.path}${f.path.startsWith('raw-sources/') ? ' (Material des Nutzers)' : ''}`).slice(0, 80).join('\n')}
 
 === Lernzeiten-Einstellungen ===
 Mo–Fr ${user.prefs.studyStart}–${user.prefs.studyEnd}, Wochenende ${user.prefs.weekendStart}–${user.prefs.weekendEnd}${user.prefs.studyOnSunday ? '' : ', sonntags kein Lernen'}, max. ${user.prefs.maxStudyPerDay} Min/Tag.
@@ -588,7 +676,7 @@ export async function runAgent(user: User, message: string, opts: { threadId?: s
   opts.emit?.({ type: 'thread', id: threadId });
 
   const system = await systemPrompt(user);
-  const ctx: Ctx = { actions: [], userMessage: message, emit: opts.emit };
+  const ctx: Ctx = { actions: [], userMessage: message, emit: opts.emit, lastAssistant: [...history].reverse().find(m => m.role === 'assistant')?.content };
   ctx.emit?.({ type: 'status', text: 'Denkt nach …' });
   const text = message || 'Was siehst du auf dem Anhang? Trag ein, was für meinen Kalender wichtig ist.';
   await addChat(user.id, threadId, 'user', files.length ? `${message}${message ? '\n' : ''}📎 ${files.map(f => f.name).join(', ')}` : message);

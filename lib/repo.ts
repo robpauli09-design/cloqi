@@ -8,6 +8,8 @@ import {
 
 const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
 /** jsonb arrives parsed; tolerate strings too. */
+export const isUuid = (v: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+
 const json = <T>(v: unknown, fallback: T): T => {
   if (v === null || v === undefined) return fallback;
   if (typeof v === 'object') return v as T;
@@ -174,6 +176,7 @@ export async function calendarOfKind(userId: string, kind: CalendarKind, connect
 }
 
 export async function getCalendar(userId: string, id: string): Promise<UserCalendar | null> {
+  if (!isUuid(id)) return null; // ids from the AI/app: unknown format = not found (no DB error)
   const r = await get('SELECT * FROM calendars WHERE id = ? AND user_id = ?', [id, userId]);
   return r ? rowToCalendar(r) : null;
 }
@@ -231,6 +234,7 @@ export async function listEvents(userId: string, from: string, to: string): Prom
 }
 
 export async function getEvent(userId: string, id: string): Promise<CalendarEvent | null> {
+  if (!isUuid(id)) return null; // ids from the AI/app: unknown format = not found (no DB error)
   const r = await get(`${EVENT_SELECT} WHERE e.id = ? AND e.user_id = ?`, [id, userId]);
   return r ? rowToEvent(r) : null;
 }
@@ -277,6 +281,7 @@ export async function updateEvent(userId: string, id: string, e: Partial<EventIn
 }
 
 export async function deleteEvent(userId: string, id: string) {
+  if (!isUuid(id)) return;
   await run('DELETE FROM events WHERE id = ? AND user_id = ?', [id, userId]); // detached occurrences cascade via series_id
 }
 
@@ -318,6 +323,7 @@ export async function setTimetableExdates(userId: string, id: string, exdates: s
 }
 
 export async function getTimetableEntry(userId: string, id: string): Promise<TimetableEntry | null> {
+  if (!isUuid(id)) return null; // ids from the AI/app: unknown format = not found (no DB error)
   const r = await get('SELECT * FROM timetable_entries WHERE id = ? AND user_id = ?', [id, userId]);
   return r ? rowToEntry(r) : null;
 }
@@ -360,6 +366,7 @@ export async function listTasks(userId: string, opts: { openOnly?: boolean } = {
 }
 
 export async function getTask(userId: string, id: string): Promise<Task | null> {
+  if (!isUuid(id)) return null; // ids from the AI/app: unknown format = not found (no DB error)
   const r = await get('SELECT * FROM tasks WHERE id = ? AND user_id = ?', [id, userId]);
   return r ? rowToTask(r) : null;
 }
@@ -378,7 +385,18 @@ export async function setTaskStatus(userId: string, id: string, status: Task['st
   await run(`UPDATE tasks SET status = ?, completed_at = ${status === 'done' ? 'now()' : 'NULL'} WHERE id = ? AND user_id = ?`, [status, id, userId]);
 }
 
+/** Change a test/task: new date/time, subject or title. */
+export async function updateTask(userId: string, id: string, t: { dueAt?: string; title?: string; subject?: string }) {
+  const sets: string[] = [];
+  const vals: Param[] = [];
+  if (t.dueAt) { sets.push('due_at = ?'); vals.push(t.dueAt); }
+  if (t.title) { sets.push('title = ?'); vals.push(t.title.slice(0, 160)); }
+  if (t.subject) { sets.push('subject = ?'); vals.push(t.subject.slice(0, 60)); }
+  if (sets.length) await run(`UPDATE tasks SET ${sets.join(', ')} WHERE id = ? AND user_id = ?`, [...vals, id, userId]);
+}
+
 export async function deleteTask(userId: string, id: string) {
+  if (!isUuid(id)) return;
   await run('DELETE FROM tasks WHERE id = ? AND user_id = ?', [id, userId]);
 }
 
@@ -397,6 +415,7 @@ export async function listBlocks(userId: string, from?: string, to?: string): Pr
 }
 
 export async function getBlock(userId: string, id: string): Promise<StudyBlock | null> {
+  if (!isUuid(id)) return null; // ids from the AI/app: unknown format = not found (no DB error)
   const r = await get('SELECT * FROM study_blocks WHERE id = ? AND user_id = ?', [id, userId]);
   return r ? rowToBlock(r) : null;
 }
@@ -422,6 +441,7 @@ export async function updateBlock(userId: string, id: string, patch: Partial<Pic
 }
 
 export async function deleteBlocks(userId: string, ids: string[]) {
+  ids = ids.filter(isUuid);
   if (!ids.length) return;
   await (await db()).tx(async q => {
     for (const id of ids) await q.run('DELETE FROM study_blocks WHERE id = ? AND user_id = ?', [id, userId]);
@@ -535,6 +555,7 @@ export async function listOpenSuggestions(userId: string): Promise<Suggestion[]>
 }
 
 export async function getSuggestion(userId: string, id: string): Promise<Suggestion | null> {
+  if (!isUuid(id)) return null; // ids from the AI/app: unknown format = not found (no DB error)
   const r = await get('SELECT * FROM suggestions WHERE id = ? AND user_id = ?', [id, userId]);
   return r ? rowToSuggestion(r) : null;
 }
@@ -661,6 +682,7 @@ export async function createThread(userId: string, title: string): Promise<strin
 }
 
 export async function deleteThread(userId: string, id: string) {
+  if (!isUuid(id)) return;
   await run('DELETE FROM chat_threads WHERE id = ? AND user_id = ?', [id, userId]); // messages cascade
 }
 

@@ -2,6 +2,7 @@ import { requireReadyUser } from '@/lib/auth';
 import { Sidebar, MobileNav, MobileSectionTabs } from '@/components/Navigation';
 import { Toaster } from '@/components/Toaster';
 import { BackgroundTasks } from '@/components/BackgroundTasks';
+import { RememberPath } from '@/components/RememberPath';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireReadyUser();
@@ -13,6 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <MobileNav mascot={nav.mascot} />
       <Toaster mascot={user.prefs.mascot} />
       <BackgroundTasks mascot={user.prefs.mascot} />
+      <RememberPath />
     </div>
   );
 }

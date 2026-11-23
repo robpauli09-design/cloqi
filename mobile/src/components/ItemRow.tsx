@@ -1,17 +1,18 @@
-import { StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import type { Item } from '@/api';
 import { categoryColor, categoryLabel, categorySoft, colors, font, itemMark, MARK_STYLE, radius } from '@/theme';
 import { T } from './ui';
 
 /** One calendar entry (lesson, event, study block, deadline) – like the agenda view on the website. */
-export function ItemRow({ item }: { item: Item }) {
+export function ItemRow({ item, onPress }: { item: Item; onPress?: () => void }) {
   const mark = itemMark(item);
   const ms = mark ? MARK_STYLE[mark] : null;
   const cancelled = mark === 'cancelled';
   const done = item.status === 'done';
   const color = ms?.color ?? categoryColor[item.category] ?? colors.leafDark;
   return (
-    <View style={[st.row, { backgroundColor: ms?.soft ?? categorySoft[item.category] ?? colors.leafSoft }, cancelled && st.cancelled, mark === 'exam' && st.exam]}>
+    <Pressable onPress={onPress} disabled={!onPress} accessibilityRole={onPress ? 'button' : undefined}
+      style={({ pressed }) => [st.row, { backgroundColor: ms?.soft ?? categorySoft[item.category] ?? colors.leafSoft }, cancelled && st.cancelled, mark === 'exam' && st.exam, pressed && { opacity: 0.75 }]}>
       <View style={[st.bar, { backgroundColor: color }]} />
       <View style={st.time}>
         {item.allDay ? <T style={st.timeText}>ganztägig</T> : <>
@@ -29,7 +30,7 @@ export function ItemRow({ item }: { item: Item }) {
           {[item.location, item.teacher, item.kind === 'study' ? 'Lernblock' : categoryLabel[item.category]].filter(Boolean).join(' · ')}
         </T>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
