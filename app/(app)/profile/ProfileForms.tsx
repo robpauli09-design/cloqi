@@ -5,14 +5,14 @@ import Link from 'next/link';
 import { Bell, Download, LogOut, ShieldCheck, Trash2, X } from 'lucide-react';
 import { logout } from '@/app/actions/auth';
 import { addSubject, deleteAccount, removeSubject, saveProfile, savePrefs, setCycleInCalendar, setCycleModule } from '@/app/actions/settings';
-import { USER_TYPE_LABELS, type Prefs, type Subject, type UserType } from '@/lib/types';
-import { Mascot, mascotReady, type MascotName } from '@/components/Mascot';
+import { GENDER_LABELS, USER_TYPE_LABELS, type Gender, type Prefs, type Subject, type UserType } from '@/lib/types';
+import { Mascot, type MascotName } from '@/components/Mascot';
 import { toastResult } from '@/components/Toaster';
 import { FormMessage, SubmitButton, Toggle } from '@/components/ui';
 
 const ZONES = ['Europe/Vienna', 'Europe/Berlin', 'Europe/Zurich', 'Europe/Rome', 'Europe/London', 'Europe/Paris', 'Europe/Madrid', 'Europe/Warsaw', 'America/New_York', 'Asia/Tokyo'];
 
-export function ProfileForm({ name, userType, timezone, mascot }: { name: string; userType: UserType | null; timezone: string; mascot: MascotName }) {
+export function ProfileForm({ name, userType, gender, timezone, mascot }: { name: string; userType: UserType | null; gender: Gender | null; timezone: string; mascot: MascotName }) {
   const [state, action] = useActionState(saveProfile, null);
   const [m, setM] = useState(mascot);
   return (
@@ -24,6 +24,13 @@ export function ProfileForm({ name, userType, timezone, mascot }: { name: string
           <label className="label" htmlFor="p-type">Benutzerart</label>
           <select id="p-type" name="userType" defaultValue={userType ?? 'sonstiges'} className="input">
             {(Object.keys(USER_TYPE_LABELS) as UserType[]).map(t => <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className="label" htmlFor="p-gender">Geschlecht</label>
+          <select id="p-gender" name="gender" defaultValue={gender ?? ''} className="input">
+            <option value="" disabled>Bitte wählen</option>
+            {(Object.keys(GENDER_LABELS) as Gender[]).map(g => <option key={g} value={g}>{GENDER_LABELS[g]}</option>)}
           </select>
         </div>
         <div>
@@ -40,7 +47,7 @@ export function ProfileForm({ name, userType, timezone, mascot }: { name: string
           {(['cloki', 'clea'] as const).map(x => (
             <button key={x} type="button" onClick={() => setM(x)} aria-pressed={m === x}
               className={`flex items-center gap-3 rounded-2xl border-2 p-3 ${m === x ? 'border-leaf bg-leaf-soft' : 'border-line'}`}>
-              <Mascot name={x} variant="head" size={44} /><span className="font-semibold">{x === 'cloki' ? 'Cloki' : 'Clea'}{!mascotReady(x) && <span className="block text-[10px] font-medium text-ink-faint">Bild folgt</span>}</span>
+              <Mascot name={x} variant="head" size={44} /><span className="font-semibold">{x === 'cloki' ? 'Cloki' : 'Clea'}</span>
             </button>
           ))}
         </div>

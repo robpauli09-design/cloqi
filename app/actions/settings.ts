@@ -17,9 +17,10 @@ import {
 } from '@/lib/repo';
 import { freeSlots } from '@/lib/scheduler';
 import { isValidDate, isValidTime, todayIn, utcToZoned } from '@/lib/time';
-import { CATEGORIES, USER_TYPE_LABELS, type Category, type Prefs, type Subject, type User, type UserType } from '@/lib/types';
+import { CATEGORIES, GENDER_LABELS, USER_TYPE_LABELS, type Category, type Gender, type Prefs, type Subject, type User, type UserType } from '@/lib/types';
 import { fail, InputError, int, text, time, type ActionResult } from '@/lib/validate';
 import { normalizeWebUntisUrl, syncWebUntis, upsertFeedEvents, fetchCalendar, isWebUntisHost } from '@/lib/webuntis';
+import { ForbiddenError, listPublicClasses, parsePublicLink, studentIsPublic, type UntisClass } from '@/lib/untis-public';
 
 async function done(message: string): Promise<ActionResult> {
   revalidatePath('/', 'layout');
@@ -34,8 +35,10 @@ export async function completeOnboarding(form: FormData) {
   const type = String(form.get('userType') ?? '') as UserType;
   const areas = form.getAll('areas').map(String).filter(a => ['schule', 'arbeit', 'training', 'privat'].includes(a));
   const mascot = form.get('mascot') === 'clea' ? 'clea' : 'cloki';
+  const gender = String(form.get('gender') ?? '');
   await updateUser(user.id, {
     name, userType: type in USER_TYPE_LABELS ? type : 'sonstiges', lifeAreas: areas, onboarded: true,
+    gender: gender in GENDER_LABELS ? gender as Gender : null,
     prefs: { ...user.prefs, mascot },
   });
   const next = String(form.get('next') ?? '');
@@ -53,6 +56,7 @@ export async function saveProfile(_prev: ActionResult | null, form: FormData): P
     await updateUser(user.id, {
       name: text(form, 'name', { required: true, max: 40, label: 'Name' }),
       userType: type in USER_TYPE_LABELS ? type : user.userType,
+      gender: String(form.get('gender') ?? '') in GENDER_LABELS ? String(form.get('gender')) as Gender : user.gender,
       timezone: tz,
       prefs: { ...user.prefs, mascot: form.get('mascot') === 'clea' ? 'clea' : 'cloki' },
     });
@@ -106,15 +110,78 @@ export async function deleteAccount(_prev: ActionResult | null, form: FormData):
 
 // ---------- connections ----------
 
+export type WebUntisLookup =
+  | { ok: true; kind: 'ical' }
+  | { ok: true; kind: 'public'; school: string; studentPublic: boolean; classes: UntisClass[] }
+  | { ok: false; error: string };
+
+/** Step 1: checks a pasted WebUntis link. For the normal timetable link it lists the public classes. */
+export async function lookupWebUntis(raw: string): Promise<WebUntisLookup> {
+  try {
+    const user = await requireUser();
+    const link = String(raw ?? '').trim().slice(0, 2000);
+    if (!link) throw new InputError('Bitte füge deinen WebUntis-Link ein.');
+    const target = parsePublicLink(link);
+    if (!target) { normalizeWebUntisUrl(link); return { ok: true, kind: 'ical' }; }
+    const studentPublic = await studentIsPublic(target, todayIn(user.timezone));
+    let classes: UntisClass[] = [];
+    try { classes = await listPublicClasses(target); } catch (e) { if (!(e instanceof ForbiddenError)) throw e; }
+    if (!studentPublic && !classes.length) {
+      throw new InputError('Deine Schule hat keinen öffentlichen Stundenplan freigegeben. Nutze stattdessen den iCal-Link aus WebUntis (Profil → Datenzugriff) oder lege den Stundenplan manuell an.');
+    }
+    return { ok: true, kind: 'public', school: target.school, studentPublic, classes };
+  } catch (e) { return fail(e) as { ok: false; error: string }; }
+}
+
+/** Step 2: connects WebUntis – via iCal link, the public student timetable or a public class timetable. */
 export async function connectWebUntis(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const url = normalizeWebUntisUrl(text(form, 'url', { required: true, max: 2000, label: 'Kalender-Link' }));
-    // test the link before storing it
-    parseIcs(await fetchCalendar(url, isWebUntisHost), user.timezone);
-    await upsertConnection(user.id, 'webuntis', { status: 'connected', secretEnc: encrypt(url.toString()) });
+    const raw = text(form, 'url', { required: true, max: 2000, label: 'WebUntis-Link' });
+    const target = parsePublicLink(raw);
+    if (target) {
+      const choice = String(form.get('target') ?? '');
+      let elementType: 1 | 5, elementId: number, label: string;
+      if (choice === 'student' && target.entityId && await studentIsPublic(target, todayIn(user.timezone))) {
+        elementType = 5; elementId = target.entityId; label = 'Mein Stundenplan';
+      } else {
+        const cls = (await listPublicClasses(target)).find(c => String(c.id) === choice);
+        if (!cls) throw new InputError('Bitte wähle deine Klasse aus.');
+        elementType = 1; elementId = cls.id; label = cls.name;
+      }
+      await deleteConnection(user.id, 'webuntis'); // switching class/source: start clean
+      await upsertConnection(user.id, 'webuntis', {
+        status: 'connected', secretEnc: encrypt(`https://${target.host}/WebUntis/?school=${encodeURIComponent(target.school)}`),
+        config: { untis: { host: target.host, school: target.school, elementType, elementId, label, groups: [], excludedGroups: [] } },
+      });
+    } else {
+      const url = normalizeWebUntisUrl(raw);
+      parseIcs(await fetchCalendar(url, isWebUntisHost), user.timezone); // test the link before storing it
+      await deleteConnection(user.id, 'webuntis');
+      await upsertConnection(user.id, 'webuntis', { status: 'connected', secretEnc: encrypt(url.toString()) });
+    }
     const stats = await syncWebUntis(user);
-    return done(`WebUntis verbunden: ${stats.imported} Stunden übernommen${stats.cancelled ? `, ${stats.cancelled} davon entfallen` : ''}.`);
+    const conn = await getConnection(user.id, 'webuntis');
+    const parallel = conn?.config.untis?.groups.filter(g => g.parallel).length ?? 0;
+    revalidatePath('/connect');
+    return done(`WebUntis verbunden: ${stats.imported} Stunden übernommen${stats.cancelled ? `, ${stats.cancelled} davon entfallen` : ''}.${parallel ? ' Wähle jetzt noch, welche Kurse du besuchst.' : ''}`);
+  } catch (e) { return fail(e); }
+}
+
+/** Which parallel courses (religion/ethics, languages, …) of the class timetable the student attends. */
+export async function saveWebUntisGroups(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const conn = await getConnection(user.id, 'webuntis');
+    const cfg = conn?.config.untis;
+    if (!conn || !cfg) throw new InputError('WebUntis ist nicht über den Stundenplan-Link verbunden.');
+    const attend = new Set(form.getAll('attend').map(String));
+    const excludedGroups = cfg.groups.filter(g => !attend.has(g.name)).map(g => g.name);
+    await upsertConnection(user.id, 'webuntis', { config: { ...conn.config, untis: { ...cfg, excludedGroups } } });
+    await syncWebUntis(user);
+    revalidatePath('/calendar');
+    revalidatePath('/connect');
+    return done('Gespeichert – dein Stundenplan zeigt jetzt nur noch deine Kurse.');
   } catch (e) { return fail(e); }
 }
 
@@ -322,6 +389,7 @@ export async function setCycleModule(enabled: boolean, consent: boolean): Promis
   try {
     const user = await requireUser();
     if (enabled && !consent) throw new InputError('Bitte bestätige die Einwilligung zur Verarbeitung deiner Zyklusdaten.');
+    if (enabled && user.gender === 'm') throw new InputError('Cycle ist für dein Profil nicht verfügbar.');
     await setCycleConsent(user.id, enabled);
     await updateUser(user.id, { prefs: { ...user.prefs, cycleEnabled: enabled, cycleInCalendar: enabled && user.prefs.cycleInCalendar } });
     return done(enabled ? 'CYCLE ist aktiviert.' : 'CYCLE ist deaktiviert und alle Zyklusdaten wurden gelöscht.');

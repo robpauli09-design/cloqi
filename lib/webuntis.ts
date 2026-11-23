@@ -2,14 +2,16 @@ import 'server-only';
 import { decrypt } from './crypto';
 import { parseIcs, type IcsEvent } from './ics';
 import {
-  addSuggestion, calendarOfKind, createEvent, eventsBySource, getConnection, markConnectionSync, updateEvent,
+  addSuggestion, calendarOfKind, createEvent, deleteEvent, eventsBySource, getConnection, markConnectionSync, updateEvent, upsertConnection,
 } from './repo';
-import { formatDateDe, utcToZoned } from './time';
+import { formatDateDe, todayIn, utcToZoned } from './time';
+import { fetchPublicTimetable } from './untis-public';
 import type { Category, User } from './types';
 
-// WebUntis is connected through the personal iCal subscription that every user can
-// activate in WebUntis (Profil → Datenzugriff → "Kalender veröffentlichen").
-// It needs no WebUntis password, is offered by Untis itself and only gives read access.
+// WebUntis can be connected in two ways, both without a WebUntis password and read-only:
+//  1. the normal timetable link (…/WebUntis?school=X#/basic/timetablePublic/…): CLOQI reads the
+//     timetable the school publishes – usually the class timetable (see untis-public.ts);
+//  2. the personal iCal subscription (Profil → Datenzugriff → "Kalender veröffentlichen").
 
 const MAX_BYTES = 5 * 1024 * 1024;
 
@@ -25,9 +27,6 @@ export function normalizeWebUntisUrl(raw: string): URL {
   if (url.protocol !== 'https:') throw new Error('Der Link muss mit https:// oder webcal:// beginnen.');
   if (!isWebUntisHost(url.hostname)) throw new Error('Bitte füge den Kalender-Link aus WebUntis ein (Adresse endet auf webuntis.com).');
   if (url.username || url.password || (url.port && url.port !== '443')) throw new Error('Dieser Link wird aus Sicherheitsgründen nicht akzeptiert.');
-  if (/#\/basic\/timetable/i.test(raw)) {
-    throw new Error('Das ist der Link zur Stundenplan-Ansicht, nicht der Kalender-Link. Öffne in WebUntis „iCal-Abo verwalten“ bzw. Profil → Datenzugriff.');
-  }
   return url;
 }
 
@@ -138,10 +137,24 @@ export async function syncWebUntis(user: User, now = new Date()): Promise<Import
   const conn = await getConnection(user.id, 'webuntis');
   if (!conn || !conn.secretEnc) throw new Error('WebUntis ist nicht verbunden.');
   try {
-    const url = normalizeWebUntisUrl(decrypt(conn.secretEnc));
-    const text = await fetchCalendar(url, isWebUntisHost);
-    const events = parseIcs(text, user.timezone, new Date(now.getTime() + 120 * 86400000));
-    const stats = await upsertFeedEvents(user, 'webuntis', conn.id, events, 'schule', now);
+    let stats: ImportStats;
+    const cfg = conn.config.untis;
+    if (cfg) {
+      const tt = await fetchPublicTimetable({ host: cfg.host, school: cfg.school, entityId: null }, cfg.elementType, cfg.elementId, user.timezone, todayIn(user.timezone, now));
+      const excluded = new Set(cfg.excludedGroups);
+      // lessons of courses the student doesn't attend are removed, not shown as cancelled
+      for (const e of (await eventsBySource(user.id, 'webuntis')).filter(e => e.connectionId === conn.id)) {
+        const g = e.description?.match(/^Gruppe: (.+)$/m)?.[1];
+        if (g && excluded.has(g)) await deleteEvent(user.id, e.id);
+      }
+      stats = await upsertFeedEvents(user, 'webuntis', conn.id, tt.events.filter(e => !e.group || !excluded.has(e.group)), 'schule', now);
+      await upsertConnection(user.id, 'webuntis', { config: { ...conn.config, untis: { ...cfg, groups: tt.groups } } });
+    } else {
+      const url = normalizeWebUntisUrl(decrypt(conn.secretEnc));
+      const text = await fetchCalendar(url, isWebUntisHost);
+      const events = parseIcs(text, user.timezone, new Date(now.getTime() + 120 * 86400000));
+      stats = await upsertFeedEvents(user, 'webuntis', conn.id, events, 'schule', now);
+    }
     await markConnectionSync(conn.id, null);
     return stats;
   } catch (e) {

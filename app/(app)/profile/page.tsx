@@ -4,6 +4,7 @@ import { ArrowRight } from 'lucide-react';
 import { requireReadyUser } from '@/lib/auth';
 import { listConnections } from '@/lib/repo';
 import { formatDateDe, utcToZoned } from '@/lib/time';
+import { cycleAvailable } from '@/lib/types';
 import { Mascot } from '@/components/Mascot';
 import { CycleSettings, DangerZone, NotificationSettings, PrefsForm, ProfileForm, SubjectsForm } from './ProfileForms';
 
@@ -29,7 +30,7 @@ export default async function ProfilePage() {
       </header>
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <ProfileForm name={user.name} userType={user.userType} timezone={user.timezone} mascot={user.prefs.mascot} />
+        <ProfileForm name={user.name} userType={user.userType} gender={user.gender} timezone={user.timezone} mascot={user.prefs.mascot} />
 
         <section className="card card-pad">
           <div className="flex items-center justify-between">
@@ -57,7 +58,7 @@ export default async function ProfilePage() {
           <SubjectsForm subjects={user.prefs.subjects} />
           <NotificationSettings />
         </div>
-        <CycleSettings enabled={user.prefs.cycleEnabled} inCalendar={user.prefs.cycleInCalendar} />
+        {cycleAvailable(user) && <CycleSettings enabled={user.prefs.cycleEnabled} inCalendar={user.prefs.cycleInCalendar} />}
         <DangerZone />
       </div>
     </div>

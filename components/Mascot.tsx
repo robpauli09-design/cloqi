@@ -5,8 +5,8 @@ import { useState } from 'react';
 
 export type MascotName = 'cloki' | 'clea';
 
-/** Mascots whose image files exist in /public/mascot. Add 'clea' once clea-full/bust/head.png are there. */
-export const AVAILABLE_MASCOTS: MascotName[] = ['cloki'];
+/** Mascots whose image files exist in /public/mascot. */
+export const AVAILABLE_MASCOTS: MascotName[] = ['cloki', 'clea'];
 export const mascotReady = (n: MascotName) => AVAILABLE_MASCOTS.includes(n);
 type Variant = 'full' | 'bust' | 'head';
 

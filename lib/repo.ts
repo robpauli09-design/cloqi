@@ -23,7 +23,7 @@ const run = async (sql: string, p: Param[] = []) => (await db()).run(sql, p);
 
 const USER_SELECT = `
   SELECT u.id, u.email, u.password_hash, u.created_at,
-         p.display_name, p.user_type, p.timezone, p.mascot, p.life_areas, p.onboarded_at,
+         p.display_name, p.user_type, p.gender, p.timezone, p.mascot, p.life_areas, p.onboarded_at,
          p.cycle_enabled, p.cycle_in_calendar,
          s.weekday_start, s.weekday_end, s.weekend_start, s.weekend_end, s.study_on_sunday, s.max_minutes_per_day,
          s.max_block_minutes, s.break_minutes, s.daily_goal_minutes, s.default_reminder_minutes
@@ -43,7 +43,8 @@ async function toUser(r: Row): Promise<User> {
   };
   return {
     id: String(r.id), email: String(r.email), name: String(r.display_name ?? ''),
-    userType: (str(r.user_type) as User['userType']) ?? null, timezone: String(r.timezone),
+    userType: (str(r.user_type) as User['userType']) ?? null,
+    gender: r.gender === 'm' || r.gender === 'w' || r.gender === 'd' ? r.gender : null, timezone: String(r.timezone),
     onboarded: r.onboarded_at !== null && r.onboarded_at !== undefined, lifeAreas: json<string[]>(r.life_areas, []),
     prefs, createdAt: String(r.created_at),
   };
@@ -78,11 +79,12 @@ export async function touchLogin(id: string) {
   await run('UPDATE users SET last_login_at = now() WHERE id = ?', [id]);
 }
 
-export async function updateUser(id: string, patch: Partial<Pick<User, 'name' | 'userType' | 'timezone' | 'onboarded' | 'lifeAreas' | 'prefs'>>) {
+export async function updateUser(id: string, patch: Partial<Pick<User, 'name' | 'userType' | 'gender' | 'timezone' | 'onboarded' | 'lifeAreas' | 'prefs'>>) {
   const sets: string[] = [];
   const vals: Param[] = [];
   if (patch.name !== undefined) { sets.push('display_name = ?'); vals.push(patch.name); }
   if (patch.userType !== undefined) { sets.push('user_type = ?'); vals.push(patch.userType); }
+  if (patch.gender !== undefined) { sets.push('gender = ?'); vals.push(patch.gender); }
   if (patch.timezone !== undefined) { sets.push('timezone = ?'); vals.push(patch.timezone); }
   if (patch.onboarded !== undefined) { sets.push(patch.onboarded ? 'onboarded_at = coalesce(onboarded_at, now())' : 'onboarded_at = NULL'); }
   if (patch.lifeAreas !== undefined) { sets.push('life_areas = ?'); vals.push(JSON.stringify(patch.lifeAreas)); }

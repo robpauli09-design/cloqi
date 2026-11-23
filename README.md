@@ -80,7 +80,7 @@ HEALTH     cycle_entries (vollständig verschlüsselt)
 ## Weitere Funktionen
 
 Kalender (Tag/Woche/Monat/Agenda, Drag-and-drop, Serien mit „nur dieser / ganze Serie“, Kalendergruppen,
-Konflikte), WebUntis über den persönlichen iCal-Link, ICS/CSV-Import, Ferien, Google/Outlook-Zwei-Wege-Sync,
+Konflikte), WebUntis über den normalen Stundenplan-Link (öffentlicher Klassen-Stundenplan, eigene Kurse wählbar) oder den iCal-Link, ICS/CSV-Import, Ferien, Google/Outlook-Zwei-Wege-Sync,
 Apple-Kalender-Abo (einseitig), Learn mit Lernplan-Vorschlag, Life-Routinen, Gamification, Erinnerungen,
 optionales Cycle-Modul, DSGVO-Export und Account-Löschung.
 

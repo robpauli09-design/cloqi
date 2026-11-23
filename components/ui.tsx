@@ -4,10 +4,10 @@ import { useFormStatus } from 'react-dom';
 import { Loader2 } from 'lucide-react';
 import { CATEGORY_META, type Category } from '@/lib/types';
 
-export function SubmitButton({ children, className = 'btn-primary', pendingText }: { children: React.ReactNode; className?: string; pendingText?: string }) {
+export function SubmitButton({ children, className = 'btn-primary', pendingText, disabled = false }: { children: React.ReactNode; className?: string; pendingText?: string; disabled?: boolean }) {
   const { pending } = useFormStatus();
   return (
-    <button type="submit" disabled={pending} className={className}>
+    <button type="submit" disabled={pending || disabled} className={className}>
       {pending && <Loader2 size={16} className="animate-spin" />}
       {pending && pendingText ? pendingText : children}
     </button>

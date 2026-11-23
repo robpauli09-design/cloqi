@@ -62,6 +62,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   user_id            uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   display_name       text NOT NULL DEFAULT '' CHECK (length(display_name) <= 40),
   user_type          text CHECK (user_type IN ('schueler', 'student', 'lehrer', 'berufstaetig', 'sonstiges')),
+  gender             text CHECK (gender IN ('m', 'w', 'd')),   -- m/w/d; the Cycle module is offered for w/d only
   timezone           text NOT NULL DEFAULT 'Europe/Vienna',
   mascot             text NOT NULL DEFAULT 'cloki' CHECK (mascot IN ('cloki', 'clea')),
   life_areas         jsonb NOT NULL DEFAULT '[]'::jsonb,      -- ["schule","training",...]
@@ -73,6 +74,9 @@ CREATE TABLE IF NOT EXISTS profiles (
   updated_at         timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT cycle_requires_consent CHECK (NOT cycle_enabled OR cycle_consent_at IS NOT NULL)
 );
+
+-- Upgrades for databases created with an earlier version of this script
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender text CHECK (gender IN ('m', 'w', 'd'));
 
 CREATE TABLE IF NOT EXISTS study_settings (
   user_id                   uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

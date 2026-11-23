@@ -3,8 +3,8 @@
 import { useActionState, useState, useTransition } from 'react';
 import { Apple, ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, CheckCircle2, Copy, FileUp, Loader2, RefreshCw, School, Trash2, Unplug, XCircle } from 'lucide-react';
 import {
-  addHoliday, addLesson, connectWebUntis, disconnect, enableAppleFeed, importTimetableFile, refreshProviderCalendars, removeHoliday,
-  removeLesson, saveFeedCategories, saveProviderSettings, syncNow,
+  addHoliday, addLesson, connectWebUntis, disconnect, lookupWebUntis, saveWebUntisGroups, enableAppleFeed, importTimetableFile, refreshProviderCalendars, removeHoliday,
+  removeLesson, saveFeedCategories, saveProviderSettings, syncNow, type WebUntisLookup,
 } from '@/app/actions/settings';
 import { formatDateDe, utcToZoned, WEEKDAYS_DE, WEEKDAYS_SHORT_DE } from '@/lib/time';
 import { CATEGORIES, CATEGORY_META, type ConnectionConfig, type TimetableEntry } from '@/lib/types';
@@ -188,33 +188,109 @@ export function AppleCard({ conn, urls, tz }: { conn: Conn | null; urls: { https
 
 export function WebUntisCard({ conn, tz }: { conn: Conn | null; tz: string }) {
   const [state, action] = useActionState(connectWebUntis, null);
+  const [url, setUrl] = useState('');
+  const [lookup, setLookup] = useState<WebUntisLookup | null>(null);
+  const [target, setTarget] = useState('');
+  const [checking, startCheck] = useTransition();
+  const untis = conn?.config.untis;
+  const isPublic = lookup?.ok && lookup.kind === 'public' ? lookup : null;
+
+  const check = () => startCheck(async () => {
+    const r = await lookupWebUntis(url);
+    setLookup(r);
+    if (r.ok && r.kind === 'public') setTarget(r.studentPublic ? 'student' : '');
+  });
+
   return (
     <Card title="WebUntis" logo={<School size={20} className="text-leaf-dark" />}>
       <div id="webuntis" className="-mt-20 pt-20" />
       <Status conn={conn} tz={tz} />
+      {untis && <p className="-mt-2 text-xs text-ink-soft">Quelle: öffentlicher Stundenplan <b>{untis.label}</b> · Schule {untis.school}</p>}
       <Facts rows={[
         [<ArrowDownToLine key="a" size={13} />, 'Richtung', 'Import: WebUntis → CLOQI (WebUntis bleibt maßgeblich)'],
-        [<CheckCircle2 key="b" size={13} />, 'Was kommt rein', 'Stunden, Fächer, Räume, Entfall, Verschiebungen – soweit im Kalender-Link enthalten'],
-        [<ArrowLeftRight key="c" size={13} />, 'Zugang', 'Dein persönlicher iCal-Link aus WebUntis – kein Passwort nötig'],
+        [<CheckCircle2 key="b" size={13} />, 'Was kommt rein', 'Stunden, Fächer, Lehrer, Räume, Entfall und Verschiebungen'],
+        [<ArrowLeftRight key="c" size={13} />, 'Zugang', 'Dein normaler WebUntis-Link – kein Passwort nötig'],
       ]} />
       <details className="rounded-xl bg-paper/70 p-3 text-sm" open={!conn}>
-        <summary className="cursor-pointer font-semibold">So findest du deinen WebUntis-Kalender-Link</summary>
+        <summary className="cursor-pointer font-semibold">So findest du deinen WebUntis-Link</summary>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-soft">
-          <li>WebUntis im Browser öffnen und anmelden.</li>
-          <li>„Mein Stundenplan“ → <b>iCal-Abo verwalten</b> (bzw. Profil → Datenzugriff → „Kalender veröffentlichen“).</li>
-          <li><b>Link erstellen</b> und <b>Link kopieren</b>.</li>
-          <li>Hier einfügen. Der Link der Stundenplan-<i>Ansicht</i> (…#/basic/timetable…) funktioniert nicht.</li>
+          <li>WebUntis im Browser öffnen und deinen Stundenplan anzeigen.</li>
+          <li>Die Adresse oben im Browser kopieren (sie enthält <i>webuntis.com</i> und <i>school=…</i>).</li>
+          <li>Hier einfügen, auf <b>Weiter</b> tippen und deine Klasse wählen.</li>
         </ol>
-        <p className="mt-2 text-xs text-ink-faint">Nicht jede Schule schaltet diese Funktion frei. Falls sie fehlt: Stundenplan als Datei importieren oder manuell anlegen.</p>
+        <p className="mt-2 text-xs text-ink-faint">Persönliche Stundenpläne sind meist nicht öffentlich – dann nimmt CLOQI den Stundenplan deiner Klasse und du wählst danach, welche Kurse (z. B. Religion/Ethik, Sprachen) du besuchst. Ein iCal-Link aus WebUntis funktioniert ebenfalls.</p>
       </details>
-      <form action={action} className="space-y-3">
-        <label className="label" htmlFor="wu-url">{conn ? 'Neuen Kalender-Link speichern' : 'Kalender-Link aus WebUntis'}</label>
-        <input id="wu-url" name="url" required className="input" placeholder="https://schule.webuntis.com/WebUntis/ical.do?…" autoComplete="off" />
+
+      <form action={action} className="space-y-3" onSubmit={e => { if (!isPublic && !(lookup?.ok && lookup.kind === 'ical')) { e.preventDefault(); if (url.trim()) check(); } }}>
+        <label className="label" htmlFor="wu-url">{conn ? 'Anderen Link verbinden' : 'Link aus WebUntis'}</label>
+        <input id="wu-url" name="url" required value={url} autoComplete="off" className="input"
+          placeholder="https://schule.webuntis.com/WebUntis?school=…"
+          onChange={e => { setUrl(e.target.value); setLookup(null); }} />
+        <input type="hidden" name="target" value={target} />
+
+        {isPublic && (
+          <div className="space-y-2 rounded-xl border border-line p-3">
+            <p className="text-sm font-semibold">Welcher Stundenplan gehört dir?</p>
+            {isPublic.studentPublic && (
+              <label className="flex items-center gap-2 text-sm">
+                <input type="radio" name="pick" checked={target === 'student'} onChange={() => setTarget('student')} /> Mein persönlicher Stundenplan
+              </label>
+            )}
+            {isPublic.classes.length > 0 && (
+              <>
+                {!isPublic.studentPublic && <p className="text-xs text-ink-soft">Dein persönlicher Stundenplan ist nicht öffentlich – wähle deine Klasse.</p>}
+                <select aria-label="Klasse" className="input" value={target === 'student' ? '' : target} onChange={e => setTarget(e.target.value)}>
+                  <option value="" disabled>Klasse wählen …</option>
+                  {isPublic.classes.map(c => <option key={c.id} value={String(c.id)}>{c.name}{c.longName && c.longName !== c.name ? ` – ${c.longName}` : ''}</option>)}
+                </select>
+              </>
+            )}
+          </div>
+        )}
+        {lookup && !lookup.ok && <FormMessage state={lookup} />}
         <FormMessage state={state} />
-        <SubmitButton pendingText="Verbinde & lade Stundenplan …">Mit WebUntis verbinden</SubmitButton>
+
+        {isPublic || (lookup?.ok && lookup.kind === 'ical') ? (
+          <SubmitButton pendingText="Verbinde & lade Stundenplan …" disabled={!!isPublic && !target}>Mit WebUntis verbinden</SubmitButton>
+        ) : (
+          <button type="button" className="btn-primary" disabled={!url.trim() || checking} onClick={check}>
+            {checking ? <Loader2 size={15} className="animate-spin" /> : null} Weiter
+          </button>
+        )}
       </form>
+
+      {untis && untis.groups.length > 0 && <UntisGroups groups={untis.groups} excluded={untis.excludedGroups} />}
       {conn && <SyncButtons provider="webuntis" />}
     </Card>
+  );
+}
+
+function UntisGroups({ groups, excluded }: { groups: { name: string; subject: string; parallel: boolean }[]; excluded: string[] }) {
+  const [state, action] = useActionState(saveWebUntisGroups, null);
+  const parallel = groups.filter(g => g.parallel);
+  const others = groups.filter(g => !g.parallel);
+  const box = (g: { name: string; subject: string }) => (
+    <label key={g.name} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-paper">
+      <input type="checkbox" name="attend" value={g.name} defaultChecked={!excluded.includes(g.name)} />
+      <span className="font-semibold">{g.subject}</span><span className="truncate text-xs text-ink-faint">{g.name}</span>
+    </label>
+  );
+  return (
+    <form action={action} className="space-y-3 rounded-xl border border-line p-3">
+      <div>
+        <p className="text-sm font-semibold">Welche Kurse besuchst du?</p>
+        <p className="text-xs text-ink-soft">Religion/Ethik, Sprachen und Gruppen deiner Klasse. Hake nur deine an – die anderen verschwinden aus deinem Kalender.</p>
+      </div>
+      {parallel.length > 0 && <div className="grid gap-1.5 sm:grid-cols-2">{parallel.map(box)}</div>}
+      {others.length > 0 && (
+        <details className="text-sm">
+          <summary className="cursor-pointer font-semibold text-ink-soft">Alle weiteren Kurse ({others.length})</summary>
+          <div className="mt-2 grid gap-1.5 sm:grid-cols-2">{others.map(box)}</div>
+        </details>
+      )}
+      <FormMessage state={state} />
+      <SubmitButton pendingText="Speichere …">Kurse speichern</SubmitButton>
+    </form>
   );
 }
 

@@ -1,5 +1,10 @@
 export type UserType = 'schueler' | 'student' | 'lehrer' | 'berufstaetig' | 'sonstiges';
 
+export type Gender = 'm' | 'w' | 'd';
+export const GENDER_LABELS: Record<Gender, string> = { m: 'Männlich', w: 'Weiblich', d: 'Divers' };
+/** The Cycle module is offered to female and diverse users (and to anyone who already uses it). */
+export const cycleAvailable = (u: { gender: Gender | null; prefs: { cycleEnabled: boolean } }) => u.gender !== 'm' || u.prefs.cycleEnabled;
+
 export const USER_TYPE_LABELS: Record<UserType, string> = {
   schueler: 'Schüler/in',
   student: 'Student/in',
@@ -66,6 +71,7 @@ export interface User {
   email: string;
   name: string;
   userType: UserType | null;
+  gender: Gender | null;
   timezone: string;
   onboarded: boolean;
   lifeAreas: string[];
@@ -181,6 +187,18 @@ export interface ConnectionConfig {
   importCalendarIds?: string[];       // external calendars imported into CLOQI
   availableCalendars?: { id: string; name: string; writable: boolean; primary?: boolean }[];
   account?: string;
+  /** WebUntis via the normal (public) timetable link instead of an iCal link */
+  untis?: UntisPublicConfig;
+}
+
+export interface UntisPublicConfig {
+  host: string;
+  school: string;
+  elementType: 1 | 5;            // 1 = class timetable, 5 = personal student timetable
+  elementId: number;
+  label: string;                 // e.g. "1AK"
+  groups: { name: string; subject: string; parallel: boolean }[];
+  excludedGroups: string[];      // courses the student does not attend
 }
 
 export interface Suggestion {
