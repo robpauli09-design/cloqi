@@ -49,14 +49,34 @@ export async function requireReadyUser(): Promise<User> {
   return user;
 }
 
-// Simple in-memory rate limit (per process) for login and registration attempts.
-const attempts = new Map<string, { count: number; resetAt: number }>();
-export function rateLimit(key: string, max: number, windowMs: number): boolean {
+// In-memory throttling of failed login attempts (per process).
+// Only failures count, a successful login clears the counter, so third parties
+// cannot lock a user out just by trying – the hard limit is per (account + IP).
+const failures = new Map<string, { count: number; resetAt: number }>();
+const WINDOW_MS = 15 * 60000;
+
+function sweep(now: number) {
+  if (failures.size < 5000) return;
+  for (const [k, v] of failures) if (v.resetAt < now) failures.delete(k);
+}
+
+export function isThrottled(key: string, max: number): boolean {
+  const a = failures.get(key);
+  return Boolean(a && a.resetAt > Date.now() && a.count >= max);
+}
+
+export function recordFailure(...keys: string[]) {
   const now = Date.now();
-  const a = attempts.get(key);
-  if (!a || a.resetAt < now) { attempts.set(key, { count: 1, resetAt: now + windowMs }); return true; }
-  a.count++;
-  return a.count <= max;
+  sweep(now);
+  for (const key of keys) {
+    const a = failures.get(key);
+    if (!a || a.resetAt < now) failures.set(key, { count: 1, resetAt: now + WINDOW_MS });
+    else a.count++;
+  }
+}
+
+export function clearFailures(...keys: string[]) {
+  for (const key of keys) failures.delete(key);
 }
 
 export function purgeExpiredSessions() {
