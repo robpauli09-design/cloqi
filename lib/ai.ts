@@ -2,7 +2,7 @@ import 'server-only';
 import { busyIntervals, dayRange, getCalendarItems, mainCalendarId } from './calendar';
 import { applyPlan, proposePlan } from './planning';
 import {
-  addChat, createEvent, createThread, deleteBlocks, deleteEvent, deleteTask, getBlock, getCalendar, getEvent, getTask, getThread, getVaultFile, listChat, listTasks, listVaultFiles, logAiAction, searchVault, setTaskStatus, updateBlock, updateEvent, updateTask, updateUser, writeVaultFile,
+  addChat, createEvent, createThread, deleteBlocks, deleteEvent, deleteTask, getBlock, getCalendar, getEvent, getTask, getThread, getVaultFile, listChat, listTasks, listVaultFiles, logAiAction, type PendingDeletion, searchVault, setPendingDeletions, setTaskStatus, takePendingDeletions, updateBlock, updateEvent, updateTask, updateUser, writeVaultFile,
 } from './repo';
 import { freeSlots } from './scheduler';
 import { createTaskFor } from './tasks';
@@ -37,8 +37,10 @@ interface Ctx {
   emit?: (e: StreamEvent) => void;
   /** true when the final answer was already sent as text deltas */
   streamed?: boolean;
-  /** CLOQI's previous message in this chat (to understand a short "ja") */
-  lastAssistant?: string;
+  /** deletions the user was asked to confirm in the previous turn (server-side) */
+  pending: PendingDeletion[];
+  /** deletions to confirm after this turn */
+  ask: PendingDeletion[];
 }
 
 /** What a streaming client receives while CLOQI works (NDJSON lines, see lib/ai-stream.ts). */
@@ -61,10 +63,24 @@ const toolStatus = (name: string) => TOOL_STATUS[name] ?? 'Ich erledige das …'
 
 // Deleting is only allowed when the user's own chat message asks for it – instructions hidden in
 // imported calendar titles or vault files can never trigger a deletion on their own.
-const DELETE_INTENT = /l[öo]sch|entfern|absag|sag\S* .*\bab\b|streich|storn|\bweg\b|raus(nehm|werf|tun|geb)|fällt (doch )?(aus|weg)|findet nicht statt|nicht mehr|brauch\S* .*nicht|cancel|delete|remove/i;
-/** "ja" / "passt" / "mach" … – counts as consent when CLOQI's previous message asked about deleting. */
+// Explicit wording in the user's own message only (kept narrow on purpose).
+const DELETE_INTENT = /l[öo]sch|entfern|absag|sag\S* .*\bab\b|streich|storn|\bweg\b|raus(nehm|werf)|cancel|delete|remove/i;
+/** A short "ja" confirms ONLY the deletions the server itself asked about in the previous turn. */
 const YES = /^\s*(ja|jo|jap|jep|yes|ok(ay)?|passt|gerne?|bitte|mach( das| es)?|klar|sicher|genau|richtig|stimmt|korrekt|unbedingt)\b/i;
-const deleteAllowed = (ctx: Ctx) => DELETE_INTENT.test(ctx.userMessage) || (YES.test(ctx.userMessage) && DELETE_INTENT.test(ctx.lastAssistant ?? ''));
+
+/**
+ * May this exact entry be deleted now? Yes if the user asked for deleting in this message, or answered
+ * "ja" to the server's question about exactly this entry. Otherwise the entry is queued: the server
+ * appends a confirmation question with the real title/date, and only that entry can be confirmed.
+ * (Model-written text never counts as consent.)
+ */
+function deleteAllowed(ctx: Ctx, key: string, label: string): boolean {
+  if (DELETE_INTENT.test(ctx.userMessage)) return true;
+  if (YES.test(ctx.userMessage) && ctx.pending.some(p => p.key === key)) return true;
+  if (!ctx.ask.some(p => p.key === key)) ctx.ask.push({ key, label });
+  return false;
+}
+const NEEDS_CONFIRMATION = { ok: false, needs_confirmation: true, note: 'Noch nicht gelöscht. CLOQI hängt automatisch eine Bestätigungsfrage mit dem genauen Eintrag an deine Antwort an – stell sie nicht selbst, sag nur kurz, was du vorhast.' };
 
 /** Imported text (event titles etc.) as a single-line quoted string, so it cannot break out of its data block. */
 const quoted = (s: string, max = 80) => JSON.stringify([...s].map(c => { const n = c.charCodeAt(0); return n < 32 || n === 127 || n === 0x2028 || n === 0x2029 ? ' ' : c; }).join('').trim().slice(0, max));
@@ -175,9 +191,10 @@ const TOOLS: ToolDef[] = [
     run: async (user, a, ctx) => {
       const ev = await getEvent(user.id, str(a.event_id, 60));
       need(ev, 'Termin nicht gefunden.');
-      need(deleteAllowed(ctx), 'Löschen nur, wenn der Nutzer es ausdrücklich verlangt. Frag ihn kurz („Soll ich … löschen?“) – ein „Ja“ reicht dann.');
       need(['manual', 'assistant'].includes(ev!.source), 'Nur selbst angelegte CLOQI-Termine können gelöscht werden.');
       const occ = optStr(a.occurrence_date);
+      const z = utcToZoned(ev!.startAt, user.timezone);
+      if (!deleteAllowed(ctx, `event:${ev!.id}:${occ ?? ''}`, `„${ev!.title}“ ${occ ? `am ${formatDateDe(occ, { weekday: true })}` : `${ev!.recurrenceFreq ? '(alle Termine der Serie)' : `am ${formatDateDe(z.date, { weekday: true })} um ${z.time}`}`}`)) return NEEDS_CONFIRMATION;
       if (ev!.recurrenceFreq && occ) await updateEvent(user.id, ev!.id, { exdates: [...new Set([...ev!.exdates, occ])] });
       else await deleteEvent(user.id, ev!.id);
       await log(user, ctx, 'Termin gelöscht', `${ev!.title}${occ ? ` am ${formatDateDe(occ)}` : ''}`);
@@ -251,7 +268,7 @@ const TOOLS: ToolDef[] = [
     run: async (user, a, ctx) => {
       const b = await getBlock(user.id, str(a.block_id, 60));
       need(b, 'Lernblock nicht gefunden.');
-      need(deleteAllowed(ctx), 'Löschen nur, wenn der Nutzer es ausdrücklich verlangt. Frag ihn kurz – ein „Ja“ reicht dann.');
+      if (!deleteAllowed(ctx, `block:${b!.id}`, `den Lernblock am ${formatDateDe(utcToZoned(b!.startAt, user.timezone).date, { weekday: true })} um ${utcToZoned(b!.startAt, user.timezone).time}`)) return NEEDS_CONFIRMATION;
       await deleteBlocks(user.id, [b!.id]);
       await log(user, ctx, 'Lernblock gelöscht', `${formatDateDe(utcToZoned(b!.startAt, user.timezone).date, { weekday: true })} ${utcToZoned(b!.startAt, user.timezone).time}`);
       return { ok: true };
@@ -291,7 +308,7 @@ const TOOLS: ToolDef[] = [
     run: async (user, a, ctx) => {
       const t = await getTask(user.id, str(a.task_id, 60));
       need(t, 'Test/Aufgabe nicht gefunden – nutze die task_id aus get_calendar oder search_calendar.');
-      need(deleteAllowed(ctx), 'Löschen nur, wenn der Nutzer es ausdrücklich verlangt. Frag ihn kurz – ein „Ja“ reicht dann.');
+      if (!deleteAllowed(ctx, `task:${t!.id}`, `„${t!.title}“ am ${formatDateDe(utcToZoned(t!.dueAt, user.timezone).date, { weekday: true })} (samt Lernblöcken)`)) return NEEDS_CONFIRMATION;
       await deleteTask(user.id, t!.id);
       await log(user, ctx, 'Test gelöscht', t!.title);
       return { ok: true };
@@ -412,7 +429,7 @@ ARBEITSWEISE
 - Fehlt bei einem normalen Termin die Uhrzeit, frage kurz nach. Bei Tests ohne Uhrzeit nimm 08:00.
 - Termine aus WebUntis, Importen und schreibgeschützten Kalendern nie ändern oder löschen.
 - Bestehendes ändern statt neu anlegen: Will der Nutzer etwas verschieben, umbenennen, absagen oder löschen, finde den Eintrag (Wochenliste unten, get_calendar oder search_calendar) und nutze das Werkzeug aus dessen Feld „change“ – Termine: update_event/delete_event, Tests: update_task/delete_task, Lernblöcke: update_study_block/delete_study_block. Bei Serien (Training jede Woche) frag kurz, ob nur dieser Termin oder alle gemeint sind.
-- Beim Löschen: Wenn der Nutzer es nicht eindeutig gesagt hat, frag kurz nach („Soll ich … löschen?“). Antwortet er mit „Ja“, lösch sofort.
+- Beim Löschen: Ruf das Lösch-Werkzeug einfach auf. Hat der Nutzer es nicht ausdrücklich verlangt, fragt CLOQI automatisch mit dem genauen Eintrag nach (stell die Frage nicht selbst). Antwortet er mit „Ja“, ruf dasselbe Werkzeug mit demselben Eintrag nochmal auf.
 - Melde Überschneidungen, die ein Werkzeug zurückgibt, ehrlich und schlage eine Lösung vor.
 - Gedächtnis: Wenn du etwas Neues und Dauerhaftes über den Nutzer erfährst (Ziele, Fächer, Training, Gewohnheiten, Vorlieben, wie er lernt), speichere es sofort ohne Nachfrage: kurze Stichpunkte mit vault_write mode=append in user.md; ausführlicheres Wissen in wiki/<thema>.md und halte wiki/index.md aktuell (vorher lesen, dann replace). Fachschwierigkeit zusätzlich mit set_subject.
 - Speichere Gesundheit, Religion, Herkunft und ähnlich sensible Themen nur, wenn der Nutzer es ausdrücklich will.
@@ -676,7 +693,8 @@ export async function runAgent(user: User, message: string, opts: { threadId?: s
   opts.emit?.({ type: 'thread', id: threadId });
 
   const system = await systemPrompt(user);
-  const ctx: Ctx = { actions: [], userMessage: message, emit: opts.emit, lastAssistant: [...history].reverse().find(m => m.role === 'assistant')?.content };
+  const pending = existing ? await takePendingDeletions(user.id, existing) : [];
+  const ctx: Ctx = { actions: [], userMessage: message, emit: opts.emit, pending, ask: [] };
   ctx.emit?.({ type: 'status', text: 'Denkt nach …' });
   const text = message || 'Was siehst du auf dem Anhang? Trag ein, was für meinen Kalender wichtig ist.';
   await addChat(user.id, threadId, 'user', files.length ? `${message}${message ? '\n' : ''}📎 ${files.map(f => f.name).join(', ')}` : message);
@@ -686,6 +704,13 @@ export async function runAgent(user: User, message: string, opts: { threadId?: s
     : await viaChat(cfg, user, system, history, text, files, ctx);
   if (!reply) reply = ctx.actions.length ? 'Erledigt!' : 'Das habe ich leider nicht geschafft. Versuch es bitte anders formuliert.';
   if (!ctx.streamed) ctx.emit?.({ type: 'delta', text: reply }); // providers without streaming: whole answer at once
+  if (ctx.ask.length) {
+    // the confirmation question is written by the server from real data – a "ja" then deletes exactly these
+    const q = `\n\nSoll ich ${ctx.ask.map(p => p.label).join(' und ')} löschen? Antworte mit „Ja“.`;
+    reply += q;
+    ctx.emit?.({ type: 'delta', text: q });
+    await setPendingDeletions(user.id, threadId, ctx.ask);
+  }
   await addChat(user.id, threadId, 'assistant', reply);
   return { reply, actions: ctx.actions, threadId };
 }

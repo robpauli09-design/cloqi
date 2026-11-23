@@ -322,6 +322,8 @@ CREATE TABLE IF NOT EXISTS chat_threads (
   updated_at  timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS chat_threads_user_idx ON chat_threads (user_id, updated_at DESC);
+-- deletions CLOQI asked the user to confirm (server-side, so a plain "ja" can only confirm exactly these)
+ALTER TABLE chat_threads ADD COLUMN IF NOT EXISTS pending jsonb NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE TABLE IF NOT EXISTS chat_messages (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),

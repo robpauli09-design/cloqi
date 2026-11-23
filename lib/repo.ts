@@ -681,6 +681,20 @@ export async function createThread(userId: string, title: string): Promise<strin
   return id;
 }
 
+/** A deletion CLOQI asked the user to confirm – stored server-side, consumed by the next message. */
+export interface PendingDeletion { key: string; label: string }
+
+export async function takePendingDeletions(userId: string, threadId: string): Promise<PendingDeletion[]> {
+  const r = await get('SELECT pending FROM chat_threads WHERE id = ? AND user_id = ?', [threadId, userId]);
+  const list = json<PendingDeletion[]>(r?.pending, []);
+  if (list.length) await run("UPDATE chat_threads SET pending = '[]'::jsonb WHERE id = ? AND user_id = ?", [threadId, userId]);
+  return Array.isArray(list) ? list : [];
+}
+
+export async function setPendingDeletions(userId: string, threadId: string, list: PendingDeletion[]) {
+  await run('UPDATE chat_threads SET pending = ? WHERE id = ? AND user_id = ?', [JSON.stringify(list.slice(0, 10)), threadId, userId]);
+}
+
 export async function deleteThread(userId: string, id: string) {
   if (!isUuid(id)) return;
   await run('DELETE FROM chat_threads WHERE id = ? AND user_id = ?', [id, userId]); // messages cascade
