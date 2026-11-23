@@ -4,35 +4,34 @@ import { db } from './db';
 /**
  * Soft abuse protection for the test phase. The numbers are far above what a real person does,
  * so normal users never notice them – they only stop scripts that would run up the AI bill.
- * Counted in the database (works across all serverless instances on Vercel).
+ *
+ * Usage lives in its own table (ai_usage): deleting chats does not reset it. Each request is
+ * recorded FIRST and counted afterwards, so parallel requests cannot slip through together.
  */
 export const LIMITS = {
-  aiPer10Min: 40,   // messages to CLOQI AI in 10 minutes
-  aiPerDay: 400,    // messages to CLOQI AI in 24 hours
-  voicePer10Min: 30,
+  ai: { per10Min: 40, perDay: 400 },    // messages to CLOQI AI
+  voice: { per10Min: 30, perDay: 300 }, // voice inputs
 };
 
-/** Returns a friendly message when this user sends unusually many AI messages, otherwise null. */
-export async function aiLimitReached(userId: string): Promise<string | null> {
-  const r = await (await db()).get(
-    `SELECT count(*) FILTER (WHERE created_at > now() - interval '10 minutes')::int AS m10,
-            count(*)::int AS d1
-       FROM chat_messages WHERE user_id = ? AND role = 'user' AND created_at > now() - interval '24 hours'`,
-    [userId],
-  );
-  if (Number(r?.m10 ?? 0) >= LIMITS.aiPer10Min) return 'Puh, das waren sehr viele Nachrichten auf einmal. Gönn mir ein paar Minuten Pause 🙂';
-  if (Number(r?.d1 ?? 0) >= LIMITS.aiPerDay) return 'Für heute hast du das Nachrichten-Limit der Testphase erreicht. Morgen geht’s weiter!';
-  return null;
-}
+type Kind = keyof typeof LIMITS;
 
-// Voice input has no table of its own – a per-instance counter is enough as a soft brake.
-const voice = new Map<string, number[]>();
-export function voiceLimitReached(userId: string): boolean {
-  const now = Date.now();
-  const recent = (voice.get(userId) ?? []).filter(t => now - t < 10 * 60000);
-  if (recent.length >= LIMITS.voicePer10Min) { voice.set(userId, recent); return true; }
-  recent.push(now);
-  voice.set(userId, recent);
-  if (voice.size > 5000) voice.clear();
-  return false;
+/** Records one use and returns a friendly message if the user is over the limit, otherwise null. */
+export async function useQuota(userId: string, kind: Kind): Promise<string | null> {
+  const q = await db();
+  await q.run('INSERT INTO ai_usage (user_id, kind) VALUES (?, ?)', [userId, kind]);
+  const r = await q.get(
+    `SELECT count(*) FILTER (WHERE created_at > now() - interval '10 minutes')::int AS m10, count(*)::int AS d1
+       FROM ai_usage WHERE user_id = ? AND kind = ? AND created_at > now() - interval '24 hours'`,
+    [userId, kind],
+  );
+  // occasional cleanup of old rows (keeps the table small)
+  if (Math.random() < 0.02) await q.run("DELETE FROM ai_usage WHERE created_at < now() - interval '2 days'");
+  const l = LIMITS[kind];
+  if (Number(r?.m10 ?? 0) > l.per10Min) {
+    return kind === 'ai' ? 'Puh, das waren sehr viele Nachrichten auf einmal. Gönn mir ein paar Minuten Pause 🙂' : 'Sehr viele Sprachaufnahmen auf einmal – bitte kurz warten.';
+  }
+  if (Number(r?.d1 ?? 0) > l.perDay) {
+    return kind === 'ai' ? 'Für heute hast du das Nachrichten-Limit der Testphase erreicht. Morgen geht’s weiter!' : 'Für heute ist das Limit für Spracheingaben erreicht.';
+  }
+  return null;
 }

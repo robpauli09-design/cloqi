@@ -10,7 +10,7 @@ import { createTaskFor } from './tasks';
 import { addDays, formatDateDe, isValidDate, isValidTime, todayIn, utcToZoned, weekdayOf, WEEKDAYS_DE, zonedToUtc } from './time';
 import { CATEGORIES, CATEGORY_META, TASK_KIND_LABELS, type Category, type TaskKind, type User } from './types';
 import { aiCanWrite, ensureVault, normalizePath, readVault, readVaultFile } from './vault';
-import { aiLimitReached, voiceLimitReached } from './limits';
+import { useQuota } from './limits';
 
 // CLOQI AI: a tool-using agent on any OpenAI-compatible chat API
 // (OpenAI, DeepSeek at an EU host, Mistral, …). Configure AI_BASE_URL, AI_API_KEY, AI_MODEL.
@@ -548,7 +548,7 @@ export async function chatFor(user: User, message: string, opts: { threadId?: st
   const now = Date.now();
   if (now - (lastCall.get(user.id) ?? 0) < 1500) return { ok: false, reply: 'Einen Moment bitte – ich bin noch beim letzten Schritt.', actions: [], threadId };
   lastCall.set(user.id, now);
-  const limited = await aiLimitReached(user.id);
+  const limited = await useQuota(user.id, 'ai');
   if (limited) return { ok: false, reply: limited, actions: [], threadId };
   try {
     const r = await runAgent(user, text, { threadId, attachments: files });
@@ -560,7 +560,8 @@ export async function chatFor(user: User, message: string, opts: { threadId?: st
 
 /** Speech → text for the app (OpenAI-compatible /audio/transcriptions). */
 export async function transcribe(audio: Blob, filename: string, userId?: string): Promise<string> {
-  if (userId && voiceLimitReached(userId)) throw new Error('Sehr viele Sprachaufnahmen auf einmal – bitte kurz warten.');
+  const limited = userId ? await useQuota(userId, 'voice') : null;
+  if (limited) throw new Error(limited);
   const cfg = aiConfig();
   if (!cfg) throw new Error('KI ist nicht eingerichtet.');
   const form = new FormData();

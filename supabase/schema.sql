@@ -4,7 +4,7 @@
 -- How to install: Supabase project (region EU / Frankfurt) → SQL Editor → paste this file → Run.
 -- Safe to run again: every statement uses IF NOT EXISTS / CREATE OR REPLACE.
 --
--- Design overview (19 tables)
+-- Design overview (20 tables)
 --
 --   ACCOUNT            users ─┬─ profiles (1:1)            who the person is, app settings
 --                             ├─ study_settings (1:1)      when CLOQI may plan study time
@@ -23,7 +23,7 @@
 --                        ├─ calendars (imported external calendars)
 --                        └─ sync_mappings (CLOQI item ↔ external event id, prevents duplicates)
 --
---   ASSISTANT          vault_files (Obsidian-like knowledge vault) · ai_actions (change log)
+--   ASSISTANT          vault_files (Obsidian-like knowledge vault) · ai_actions (change log) · ai_usage (limits)
 --                      chat_threads ── chat_messages · suggestions (proposals the user accepts/declines)
 --
 --   HEALTH (optional)  cycle_entries – fully encrypted by the app (GDPR Art. 9)
@@ -304,6 +304,15 @@ CREATE TABLE IF NOT EXISTS ai_actions (
 );
 CREATE INDEX IF NOT EXISTS ai_actions_user_idx ON ai_actions (user_id, created_at DESC);
 
+-- Usage counter for the soft abuse limits (lib/limits.ts). Independent of chats: deleting a chat doesn't reset it.
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind        text NOT NULL CHECK (kind IN ('ai', 'voice')),
+  created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ai_usage_user_idx ON ai_usage (user_id, kind, created_at DESC);
+
 -- One row per conversation with CLOQI AI (chat history like ChatGPT/Claude).
 CREATE TABLE IF NOT EXISTS chat_threads (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -357,7 +366,7 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['users', 'profiles', 'study_settings', 'subjects', 'sessions', 'calendar_connections', 'calendars',
     'events', 'timetable_entries', 'school_holidays', 'tasks', 'study_blocks', 'sync_mappings', 'suggestions', 'vault_files',
-    'ai_actions', 'chat_threads', 'chat_messages', 'cycle_entries'] LOOP
+    'ai_actions', 'ai_usage', 'chat_threads', 'chat_messages', 'cycle_entries'] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
       EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);

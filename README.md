@@ -62,7 +62,7 @@ wiki/           Gehört CLOQI – index.md + Themenseiten              (CLOQI sc
 
 Die Rechte werden **serverseitig** erzwungen, nicht nur per Prompt. Jede KI-Aktion landet in `ai_actions`.
 
-## Datenbank (19 Tabellen)
+## Datenbank (20 Tabellen)
 
 ```
 ACCOUNT    users ─┬─ profiles (1:1) · study_settings (1:1) · subjects (1:n) · sessions (1:n)
@@ -71,7 +71,7 @@ TIMETABLE  timetable_entries · school_holidays
 LEARN      tasks ── study_blocks
 SYNC       calendar_connections ─┬─ calendars (importierte externe Kalender)
                                  └─ sync_mappings (CLOQI-Eintrag ↔ externe Event-ID, keine Duplikate)
-ASSISTANT  vault_files · ai_actions · chat_threads ── chat_messages · suggestions
+ASSISTANT  vault_files · ai_actions · ai_usage · chat_threads ── chat_messages · suggestions
 HEALTH     cycle_entries (vollständig verschlüsselt)
 ```
 

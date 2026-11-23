@@ -47,6 +47,15 @@ const UPGRADES = [
   'CREATE INDEX IF NOT EXISTS chat_thread_idx ON chat_messages (thread_id, created_at)',
   'ALTER TABLE chat_threads ENABLE ROW LEVEL SECURITY',
   "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.chat_threads FROM anon, authenticated; END IF; END $$",
+  // usage counter for the soft abuse limits
+  `CREATE TABLE IF NOT EXISTS ai_usage (
+     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     kind text NOT NULL CHECK (kind IN ('ai', 'voice')),
+     created_at timestamptz NOT NULL DEFAULT now())`,
+  'CREATE INDEX IF NOT EXISTS ai_usage_user_idx ON ai_usage (user_id, kind, created_at DESC)',
+  'ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY',
+  "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.ai_usage FROM anon, authenticated; END IF; END $$",
 ];
 
 const isoInstant =(x: string) => new Date(x.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00')).toISOString();
