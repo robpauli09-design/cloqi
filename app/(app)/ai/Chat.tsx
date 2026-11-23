@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowUp, BookOpenText, Check, Loader2, Sparkles, Trash2 } from 'lucide-react';
+import { ArrowUp, BookOpenText, CalendarPlus, Check, Clock3, Loader2, SquarePen, Sparkles, Sun } from 'lucide-react';
 import { askCloqi, confirmProposal, type Proposal } from '@/app/actions/assistant';
 import { chatWithCloqi, clearChatAction } from '@/app/actions/ai';
 import { Mascot, MascotAvatar, type MascotName } from '@/components/Mascot';
@@ -12,13 +12,11 @@ import { toastResult } from '@/components/Toaster';
 
 interface Msg { id: string | number; from: 'user' | 'cloqi'; text: string; proposal?: Proposal; confirmLabel?: string; resolved?: boolean; actions?: string[]; error?: boolean }
 
-const EXAMPLES = [
-  'Ich habe nächsten Donnerstag einen Mathe-Test, Kapitel 4 und 5.',
-  'Ich trainiere Dienstag und Donnerstag von 17 bis 18:30 Fußball.',
-  'Was steht morgen an?',
-  'Wann habe ich diese Woche Zeit für Freunde?',
-  'Plane mir nächste Woche drei Lernstunden für BWL ein.',
-  'Englisch fällt mir schwer, Mathe eher leicht.',
+// A few quiet starters (short label, full sentence is sent). Same list in the app (mobile/src/app/(tabs)/ai.tsx).
+const STARTERS = [
+  { icon: CalendarPlus, label: 'Test eintragen', text: 'Ich habe nächsten Donnerstag einen Mathe-Test, Kapitel 4 und 5.' },
+  { icon: Sun, label: 'Was steht morgen an?', text: 'Was steht morgen an?' },
+  { icon: Clock3, label: 'Freie Zeit diese Woche', text: 'Wann habe ich diese Woche Zeit für Freunde?' },
 ];
 
 export function Chat({ mascot, name, aiEnabled, history }: { mascot: MascotName; name: string; aiEnabled: boolean; history: Msg[] }) {
@@ -57,38 +55,32 @@ export function Chat({ mascot, name, aiEnabled, history }: { mascot: MascotName;
   });
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col" style={{ minHeight: 'calc(100vh - 9rem)' }}>
-      <header className="flex flex-wrap items-center gap-4">
-        <Mascot name={mascot} variant="bust" size={92} />
-        <div className="min-w-0 flex-1">
-          <p className="eyebrow !text-leaf-dark">CLOQI AI {aiEnabled ? '' : '· Basis-Modus'}</p>
-          <h1 className="h1">Frag CLOQI</h1>
-          <p className="muted">Ich helfe dir, deinen Alltag einfacher zu organisieren – und merke mir, was dir wichtig ist.</p>
-        </div>
-        <div className="flex gap-2">
-          <Link href="/vault" className="btn-outline btn-sm"><BookOpenText size={14} /> Wissen</Link>
-          {aiEnabled && messages.length > 0 && (
-            <button className="btn-ghost btn-sm" disabled={pending} onClick={() => start(async () => { toastResult(await clearChatAction()); setMessages([]); })}>
-              <Trash2 size={14} /> Neuer Chat
-            </button>
-          )}
-        </div>
+    <div className="mx-auto flex min-h-[calc(100dvh-9.5rem)] max-w-3xl flex-col lg:min-h-[calc(100dvh-4.5rem)]">
+      <header className="flex items-center gap-2 border-b border-line pb-3">
+        <h1 className="flex-1 font-display text-lg font-semibold">CLOQI AI{aiEnabled ? '' : <span className="ml-2 text-xs font-medium text-ink-faint">Basis-Modus</span>}</h1>
+        <Link href="/vault" className="grid h-9 w-9 place-items-center rounded-xl text-ink-soft hover:bg-white hover:text-leaf-dark" aria-label="Wissen" title="Wissen"><BookOpenText size={18} /></Link>
+        {aiEnabled && messages.length > 0 && (
+          <button className="grid h-9 w-9 place-items-center rounded-xl text-ink-soft hover:bg-white hover:text-leaf-dark" aria-label="Neuer Chat" title="Neuer Chat" disabled={pending}
+            onClick={() => start(async () => { toastResult(await clearChatAction()); setMessages([]); })}>
+            <SquarePen size={18} />
+          </button>
+        )}
       </header>
 
-      <div className="mt-6 flex-1 space-y-4">
+      <div className={`mt-4 flex-1 space-y-4 ${messages.length === 0 ? 'flex flex-col items-center justify-center' : ''}`}>
         {messages.length === 0 && (
-          <div className="card card-pad">
-            <p className="font-semibold">Hey {name || 'du'}! Erzähl mir, was ansteht – tippen oder sprechen. Ich trage alles ein und plane drumherum.</p>
-            <div className="mt-4 flex flex-wrap gap-2">
-              {EXAMPLES.map(e => (
-                <button key={e} onClick={() => send(e)} className="chip border border-line bg-white px-3 py-1.5 text-left text-sm font-medium text-leaf-deep transition hover:border-leaf hover:bg-leaf-soft">{e}</button>
+          <div className="flex w-full max-w-sm animate-rise flex-col items-center text-center">
+            <MascotAvatar name={mascot} size={56} />
+            <h2 className="mt-4 font-display text-2xl font-semibold">Was steht an{name ? `, ${name}` : ''}?</h2>
+            <p className="mt-1 text-sm text-ink-soft">Schreib es einfach – ich trage es ein und plane drumherum.</p>
+            <div className="mt-7 w-full space-y-2">
+              {STARTERS.map(({ icon: Icon, label, text }) => (
+                <button key={label} onClick={() => send(text)}
+                  className="flex w-full items-center gap-3 rounded-2xl border border-line bg-white/60 px-4 py-3 text-left text-sm text-ink-soft transition hover:border-leaf/50 hover:bg-white hover:text-ink">
+                  <Icon size={16} className="shrink-0 text-leaf-dark" />{label}
+                </button>
               ))}
             </div>
-            <p className="mt-4 text-xs text-ink-faint">
-              {aiEnabled
-                ? 'CLOQI arbeitet mit deinen echten Kalenderdaten, erfindet keine Termine und merkt sich Wichtiges in deinem Wissens-Vault. Jede Änderung siehst du hier und unter Wissen → wiki/log.md.'
-                : 'Basis-Modus: Ohne eingerichtetes Sprachmodell versteht CLOQI kurze Kalenderbefehle und fragt vor jeder Änderung nach.'}
-            </p>
           </div>
         )}
         {messages.map(m => m.from === 'user' ? (
@@ -124,10 +116,10 @@ export function Chat({ mascot, name, aiEnabled, history }: { mascot: MascotName;
       </div>
 
       <form onSubmit={e => { e.preventDefault(); send(text); }}
-        className="sticky bottom-28 mt-6 flex items-center gap-2 rounded-full border border-line bg-white p-2 shadow-lift lg:bottom-4">
+        className="sticky bottom-28 mt-6 flex items-center gap-2 rounded-full border border-line bg-white p-2 shadow-card lg:bottom-4">
         <VoiceButton onText={setText} onFinal={send} />
         <input value={text} onChange={e => setText(e.target.value)} maxLength={2000} aria-label="Nachricht an CLOQI"
-          placeholder="„CLOQI, ich habe am Freitag einen Englisch-Test.“" className="h-11 min-w-0 flex-1 bg-transparent px-2 text-sm outline-none" />
+          placeholder="Schreib CLOQI …" className="h-11 min-w-0 flex-1 bg-transparent px-2 text-sm outline-none" />
         <button className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-leaf-dark text-white disabled:opacity-40" disabled={pending || !text.trim()} aria-label="Senden">
           <ArrowUp size={18} />
         </button>
