@@ -5,7 +5,7 @@ import {
   addSuggestion, calendarOfKind, createEvent, deleteEvent, eventsBySource, getConnection, markConnectionSync, updateEvent, upsertConnection,
 } from './repo';
 import { formatDateDe, todayIn, utcToZoned } from './time';
-import { fetchPublicTimetable } from './untis-public';
+import { fetchPublicTimetable, UNTIS_IMPORT_VERSION } from './untis-public';
 import type { Category, User } from './types';
 
 // WebUntis can be connected in two ways, both without a WebUntis password and read-only:
@@ -145,13 +145,14 @@ export async function syncWebUntis(user: User, now = new Date()): Promise<Import
     if (cfg) {
       const tt = await fetchPublicTimetable({ host: cfg.host, school: cfg.school, entityId: null }, cfg.elementType, cfg.elementId, user.timezone, todayIn(user.timezone, now));
       const excluded = new Set(cfg.excludedGroups);
+      const replaced = new Set(tt.replaced);
       // lessons of courses the student doesn't attend are removed, not shown as cancelled
       for (const e of (await eventsBySource(user.id, 'webuntis')).filter(e => e.connectionId === conn.id)) {
         const g = e.description?.match(/^Gruppe: (.+)$/m)?.[1];
-        if (g && excluded.has(g)) await deleteEvent(user.id, e.id);
+        if ((g && excluded.has(g)) || (e.externalUid && replaced.has(e.externalUid))) await deleteEvent(user.id, e.id);
       }
       stats = await upsertFeedEvents(user, 'webuntis', conn.id, tt.events.filter(e => !e.group || !excluded.has(e.group)), 'schule', now);
-      await upsertConnection(user.id, 'webuntis', { config: { ...conn.config, untis: { ...cfg, groups: tt.groups } } });
+      await upsertConnection(user.id, 'webuntis', { config: { ...conn.config, untis: { ...cfg, groups: tt.groups, version: UNTIS_IMPORT_VERSION } } });
     } else {
       const url = normalizeWebUntisUrl(decrypt(conn.secretEnc));
       const text = await fetchCalendar(url, isWebUntisHost);

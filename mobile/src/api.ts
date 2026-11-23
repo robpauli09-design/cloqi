@@ -107,6 +107,7 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
 
 /** Events of a streamed CLOQI AI answer (same as the website, see lib/ai.ts StreamEvent). */
 export type StreamEvent =
+  | { type: 'thread'; id: string }
   | { type: 'status'; text: string }
   | { type: 'delta'; text: string }
   | { type: 'reset' }

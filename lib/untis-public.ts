@@ -10,6 +10,18 @@ import { addDays, zonedToUtc } from './time';
 const MAX_BYTES = 3 * 1024 * 1024;
 const TIMEOUT = 15000;
 
+/** Bump when the import changes in a way existing connections must pick up (forces one full resync). */
+export const UNTIS_IMPORT_VERSION = 2;
+
+/** "SA …" → Schularbeit, "Lernko …" → Lernkontrolle, "Test …" → Test, otherwise Prüfung. */
+function examKind(text: string): string {
+  if (/^\s*SA\b|schularbeit/i.test(text)) return 'Schularbeit';
+  if (/lernko|lernkontrolle/i.test(text)) return 'Lernkontrolle';
+  if (/\btest\b/i.test(text)) return 'Test';
+  if (/referat|präsentation/i.test(text)) return 'Referat';
+  return 'Prüfung';
+}
+
 export interface PublicTarget { host: string; school: string; entityId: number | null }
 export interface UntisClass { id: number; name: string; longName: string }
 export interface UntisGroup { name: string; subject: string; parallel: boolean }
@@ -114,6 +126,7 @@ interface Period {
   id: number; lessonId: number; date: number; startTime: number; endTime: number;
   lessonText?: string; periodText?: string; substText?: string; studentGroup?: string; cellState?: string;
   is?: { cancelled?: boolean; event?: boolean; exam?: boolean };
+  exam?: { name?: string } | null;
   elements: { type: number; id: number; orgId?: number }[];
 }
 interface WeekData {
@@ -123,7 +136,8 @@ interface WeekData {
 const hhmm = (n: number) => `${String(Math.floor(n / 100)).padStart(2, '0')}:${String(n % 100).padStart(2, '0')}`;
 const ymd = (n: number) => { const s = String(n); return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`; };
 
-export interface PublicTimetable { events: (IcsEvent & { group: string | null })[]; groups: UntisGroup[] }
+/** replaced = uids of normal lessons hidden because an exam takes their place (must be removed, not shown as Entfall). */
+export interface PublicTimetable { events: (IcsEvent & { group: string | null })[]; groups: UntisGroup[]; replaced: string[] }
 
 /**
  * Loads `weeks` weeks of a public timetable (elementType 1 = class, 5 = student) and converts
@@ -135,6 +149,7 @@ export async function fetchPublicTimetable(t: PublicTarget, elementType: 1 | 5, 
   const events: PublicTimetable['events'] = [];
   const groupSubject = new Map<string, string>();
   const parallel = new Set<string>();
+  const replaced: string[] = [];
 
   for (let w = 0; w < weeks; w++) {
     const date = addDays(today, w * 7);
@@ -146,27 +161,48 @@ export async function fetchPublicTimetable(t: PublicTarget, elementType: 1 | 5, 
       .map(e => fixText(els.get(`${type}:${e.id}`)?.name ?? '')).filter(Boolean);
 
     const weekEvents: PublicTimetable['events'] = [];
+    const meta = new Map<PublicTimetable['events'][number], { subject: string; exam: boolean }>();
     for (const p of periods) {
       const day = ymd(p.date);
       const subject = names(p, 3).join(', ');
       const teachers = names(p, 2).join(', ');
       const rooms = names(p, 4).join(', ');
       const group = p.studentGroup ? fixText(p.studentGroup).slice(0, 60) : null;
-      const title = subject || fixText(p.lessonText) || fixText(p.substText) || (p.is?.event ? 'Schulveranstaltung' : 'Unterricht');
-      const info = [fixText(p.lessonText), fixText(p.periodText), fixText(p.substText)].filter(Boolean).join(' · ');
+      const isExam = Boolean(p.is?.exam || p.cellState === 'EXAM' || p.exam);
+      const lessonText = fixText(p.lessonText);
+      let title = subject || lessonText || fixText(p.substText) || (p.is?.event ? 'Schulveranstaltung' : 'Unterricht');
+      let info = [lessonText, fixText(p.periodText), fixText(p.substText)].filter(Boolean).join(' · ');
+      if (isExam) {
+        // e.g. "SA 1. SA Deutsch SA-Stoff: …" → title "1. SA Deutsch" / "Schularbeit D", material in the description
+        const kind = examKind(`${lessonText} ${p.exam?.name ?? ''}`);
+        const examName = fixText(p.exam?.name ?? '').trim();
+        title = /\s/.test(examName) && examName.length > 4 ? examName : `${kind} ${subject || examName}`.trim();
+        const material = lessonText.replace(/^\s*(SA|Lernko)\b\s*/i, '').replace(examName, '').trim();
+        info = [`${kind}${subject ? ` · ${subject}` : ''}`, material && `Stoff: ${material}`].filter(Boolean).join('\n');
+      }
       if (group) groupSubject.set(group, subject || title);
-      weekEvents.push({
+      const ev: PublicTimetable['events'][number] = {
         uid: `untis-${p.id}`,
         summary: title.slice(0, 200),
-        description: [teachers && `Lehrer: ${teachers}`, group && `Gruppe: ${group}`, info].filter(Boolean).join('\n') || null,
+        description: ([teachers && `Lehrer: ${teachers}`, group && `Gruppe: ${group}`, info].filter(Boolean).join('\n') || '').slice(0, 2000) || null,
         location: rooms || null,
         start: zonedToUtc(day, hhmm(p.startTime), tz),
         end: zonedToUtc(day, hhmm(p.endTime), tz),
         allDay: false,
         status: p.is?.cancelled || p.cellState === 'CANCEL' ? 'CANCELLED' : 'CONFIRMED',
-        categories: p.is?.exam || p.cellState === 'EXAM' ? ['EXAM'] : [],
+        categories: isExam ? ['EXAM'] : [],
         group,
-      });
+      };
+      weekEvents.push(ev);
+      meta.set(ev, { subject, exam: isExam });
+    }
+    // an exam replaces the normal lesson of the same subject at the same time – don't show both
+    for (let k = weekEvents.length - 1; k >= 0; k--) {
+      const ev = weekEvents[k];
+      const m = meta.get(ev)!;
+      if (m.exam || !m.subject) continue;
+      const hidden = weekEvents.some(x => x !== ev && meta.get(x)!.exam && meta.get(x)!.subject === m.subject && x.start < ev.end && ev.start < x.end);
+      if (hidden) replaced.push(...weekEvents.splice(k, 1).map(e => e.uid));
     }
     // two different groups at the same time → the student only attends one of them
     for (const a of weekEvents) {
@@ -182,5 +218,5 @@ export async function fetchPublicTimetable(t: PublicTarget, elementType: 1 | 5, 
   const RELIGION = /^(RK|REV|RE|RISL|RGOR|ROR|RAK|RALT|RJ|RBUD|RNAK|RFK|ETH|ETHIK)(\d|_|$)/i;
   const groups = [...groupSubject].map(([name, subject]) => ({ name, subject, parallel: parallel.has(name) || RELIGION.test(subject) }))
     .sort((a, b) => a.subject.localeCompare(b.subject, 'de') || a.name.localeCompare(b.name, 'de'));
-  return { events, groups };
+  return { events, groups, replaced };
 }

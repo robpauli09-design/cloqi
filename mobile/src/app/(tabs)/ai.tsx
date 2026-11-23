@@ -10,6 +10,7 @@ import {
 } from 'expo-audio';
 import { api, apiStream, errorText, type ChatMessage } from '@/api';
 import { useAuth } from '@/auth';
+import { ChatMarkdown } from '@/components/ChatMarkdown';
 import { Mascot } from '@/components/Mascot';
 import { T } from '@/components/ui';
 import { MAX_FILES, pickFiles, pickPhotos, readBase64, takePhoto, type Attachment } from '@/media';
@@ -93,9 +94,11 @@ export default function Ai() {
     const patch = (f: (m: Msg) => Msg) => setMessages(ms => ms.map(m => (m.id === aid ? f(m) : m)));
     setMessages(m => [...m, { id: aid, role: 'assistant', content: '', status: 'Denkt nach …', streaming: true }]);
     let finished = false;
+    let tid = threadId;
     try {
       await apiStream('/ai/stream', { message, threadId, attachments: sending.map(({ name, mime, data }) => ({ name, mime, data })) }, e => {
-        if (e.type === 'status') patch(m => ({ ...m, status: e.text }));
+        if (e.type === 'thread') { tid = e.id; setThreadId(e.id); }
+        else if (e.type === 'status') patch(m => ({ ...m, status: e.text }));
         else if (e.type === 'delta') patch(m => ({ ...m, content: m.content + e.text, status: undefined }));
         else if (e.type === 'reset') patch(m => ({ ...m, content: '' }));
         else if (e.type === 'done') {
@@ -108,9 +111,27 @@ export default function Ai() {
       });
       if (!finished) throw new Error('Die Verbindung wurde unterbrochen. Versuch es bitte nochmal.');
     } catch (e) {
-      patch(m => ({ ...m, content: errorText(e), failed: true, streaming: false, status: undefined }));
+      // connection dropped (e.g. app was in the background) – the server still finishes and saves
+      // the answer, so fetch it from the conversation instead of showing an error
+      const reply = tid ? await waitForReply(tid, message) : null;
+      if (reply) patch(m => ({ ...m, content: reply, failed: false, streaming: false, status: undefined }));
+      else patch(m => ({ ...m, content: errorText(e), failed: true, streaming: false, status: undefined }));
     } finally { setBusy(false); }
   }, [busy, files, threadId]);
+
+  /** Polls the saved conversation until CLOQI's answer to `message` is there (max. ~3 minutes). */
+  const waitForReply = async (tid: string, message: string): Promise<string | null> => {
+    for (let i = 0; i < 70; i++) {
+      try {
+        const r = await api<{ messages: ChatMessage[] }>(`/ai?thread=${tid}`);
+        const last = r.messages[r.messages.length - 1];
+        const asked = r.messages.map(m => m.role === 'user' && m.content.startsWith(message)).lastIndexOf(true);
+        if (last?.role === 'assistant' && asked >= 0 && asked < r.messages.length - 1) return last.content;
+      } catch { /* offline – try again */ }
+      await new Promise(res => setTimeout(res, 2500));
+    }
+    return null;
+  };
 
   const newChat = () => { setMessages([]); setThreadId(null); setFiles([]); setText(''); setHistoryOpen(false); };
 
@@ -206,7 +227,9 @@ export default function Ai() {
             <View style={[st.bubble, item.role === 'user' ? st.mine : st.theirs, item.failed && { backgroundColor: colors.dangerSoft }]}>
               {item.streaming && !item.content
                 ? <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}><ActivityIndicator color={colors.leaf} /><T variant="muted">{item.status ?? 'Denkt nach …'}</T></View>
-                : <T style={item.role === 'user' ? { color: colors.white } : undefined}>{item.content}{item.streaming && <T style={{ color: colors.leaf }}> ▍</T>}</T>}
+                : item.role === 'user'
+                  ? <T style={{ color: colors.white }}>{item.content}</T>
+                  : <ChatMarkdown text={item.content} cursor={item.streaming} />}
               {!!item.actions?.length && (
                 <View style={{ gap: 4, marginTop: 8 }}>
                   {item.actions.map((a, i) => <T key={i} variant="small" style={st.action}>✓ {a}</T>)}

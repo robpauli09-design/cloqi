@@ -20,7 +20,7 @@ import { isValidDate, isValidTime, todayIn, utcToZoned } from '@/lib/time';
 import { CATEGORIES, GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Category, type Gender, type Prefs, type Subject, type User, type UserType } from '@/lib/types';
 import { fail, InputError, int, text, time, type ActionResult } from '@/lib/validate';
 import { normalizeWebUntisUrl, syncWebUntis, upsertFeedEvents, fetchCalendar, isWebUntisHost } from '@/lib/webuntis';
-import { ForbiddenError, listPublicClasses, parsePublicLink, studentIsPublic, type UntisClass } from '@/lib/untis-public';
+import { ForbiddenError, listPublicClasses, parsePublicLink, studentIsPublic, UNTIS_IMPORT_VERSION, type UntisClass } from '@/lib/untis-public';
 
 async function done(message: string): Promise<ActionResult> {
   revalidatePath('/', 'layout');
@@ -374,7 +374,9 @@ export async function autoSync(): Promise<{ changed: boolean }> {
   const stale = (iso: string | null) => !iso || Date.now() - Date.parse(iso) > 30 * 60000;
   let changed = false;
   for (const c of await listConnections(user.id)) {
-    if (!stale(c.lastSyncAt) || c.status === 'expired') continue;
+    // a newer WebUntis import (e.g. better exam detection) is applied to existing connections right away
+    const outdated = c.provider === 'webuntis' && c.config.untis && (c.config.untis.version ?? 0) < UNTIS_IMPORT_VERSION;
+    if ((!stale(c.lastSyncAt) && !outdated) || c.status === 'expired') continue;
     try {
       if (c.provider === 'webuntis') { await syncWebUntis(user); changed = true; }
       if ((c.provider === 'google' || c.provider === 'outlook') && isConfigured(c.provider)) { await syncProvider(user, c.provider); changed = true; }

@@ -6,7 +6,7 @@ import { Fragment } from 'react';
 
 function inline(text: string, onLink: (path: string) => void, key: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  const re = /(\[\[([^\]]+)\]\]|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|_([^_]+)_)/g;
+  const re = /(\[\[([^\]]+)\]\]|\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\*\*([^*]+)\*\*|`([^`]+)`|_([^_]+)_|\*([^*\s][^*]*)\*)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
@@ -20,14 +20,15 @@ function inline(text: string, onLink: (path: string) => void, key: string): Reac
     } else if (m[3]) out.push(<a key={k} href={m[4]} target="_blank" rel="noopener noreferrer" className="text-info underline">{m[3]}</a>);
     else if (m[5]) out.push(<strong key={k}>{m[5]}</strong>);
     else if (m[6]) out.push(<code key={k} className="rounded bg-paper px-1 py-0.5 text-[0.85em]">{m[6]}</code>);
-    else if (m[7]) out.push(<em key={k}>{m[7]}</em>);
+    else if (m[7] || m[8]) out.push(<em key={k}>{m[7] ?? m[8]}</em>);
     last = re.lastIndex;
   }
   if (last < text.length) out.push(text.slice(last));
   return out;
 }
 
-export function Markdown({ text, onLink }: { text: string; onLink: (path: string) => void }) {
+/** compact: for chat bubbles – headings become bold text, tighter spacing. */
+export function Markdown({ text, onLink = () => {}, compact = false }: { text: string; onLink?: (path: string) => void; compact?: boolean }) {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const blocks: React.ReactNode[] = [];
   let i = 0;
@@ -38,7 +39,7 @@ export function Markdown({ text, onLink }: { text: string; onLink: (path: string
     const h = line.match(/^(#{1,4})\s+(.*)$/);
     if (h) {
       const level = h[1].length;
-      const cls = ['font-display text-2xl font-semibold', 'font-display text-xl font-semibold mt-4', 'text-base font-bold mt-3', 'text-sm font-bold mt-2'][level - 1];
+      const cls = compact ? 'font-bold' : ['font-display text-2xl font-semibold', 'font-display text-xl font-semibold mt-4', 'text-base font-bold mt-3', 'text-sm font-bold mt-2'][level - 1];
       blocks.push(<p key={k} className={cls}>{inline(h[2], onLink, k)}</p>);
       i++; continue;
     }
@@ -80,5 +81,5 @@ export function Markdown({ text, onLink }: { text: string; onLink: (path: string
     while (i < lines.length && lines[i].trim() && !/^(#{1,4}\s|\s*[-*]\s|\|)/.test(lines[i])) { para.push(lines[i]); i++; }
     blocks.push(<p key={k} className="leading-relaxed">{para.map((p, pi) => <Fragment key={pi}>{pi > 0 && <br />}{inline(p, onLink, `${k}-${pi}`)}</Fragment>)}</p>);
   }
-  return <div className="space-y-3 text-sm text-ink">{blocks}</div>;
+  return <div className={`${compact ? 'space-y-2' : 'space-y-3'} text-sm text-ink`}>{blocks}</div>;
 }

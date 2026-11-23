@@ -220,6 +220,7 @@ export interface UntisPublicConfig {
   label: string;                 // e.g. "1AK"
   groups: { name: string; subject: string; parallel: boolean }[];
   excludedGroups: string[];      // courses the student does not attend
+  version?: number;              // import version (see UNTIS_IMPORT_VERSION)
 }
 
 export interface Suggestion {

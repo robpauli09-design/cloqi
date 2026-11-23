@@ -35,6 +35,9 @@ function wrap(sql: PgSql): Db {
 /** Keep in sync with supabase/schema.sql – only ADD … IF NOT EXISTS style statements here. */
 const UPGRADES = [
   "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS gender text CHECK (gender IN ('m', 'w', 'd'))",
+  // repair JSON values that older versions stored double-encoded (as a JSON string); no-op afterwards
+  ...[['profiles', 'life_areas'], ['events', 'exdates'], ['timetable_entries', 'exdates'], ['calendar_connections', 'config'], ['suggestions', 'payload']]
+    .map(([t, c]) => `UPDATE ${t} SET ${c} = (${c} #>> '{}')::jsonb WHERE jsonb_typeof(${c}) = 'string'`),
   // chat history (conversations)
   `CREATE TABLE IF NOT EXISTS chat_threads (
      id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -81,6 +84,9 @@ async function open(): Promise<Db> {
       instant: { to: 1184, from: [1184, 1114], serialize: (x: unknown) => String(x), parse: isoInstant },
       day: { to: 1082, from: [1082], serialize: (x: unknown) => String(x), parse: (x: string) => x },
       clock: { to: 1083, from: [1083], serialize: (x: unknown) => String(x), parse: (x: string) => x.slice(0, 5) },
+      // The app passes JSON for json/jsonb columns already as text (JSON.stringify). postgres.js would
+      // encode it a second time (stored as a JSON *string*), so text is passed through unchanged.
+      jsonb: { to: 3802, from: [114, 3802], serialize: (x: unknown) => (typeof x === 'string' ? x : JSON.stringify(x)), parse: (x: string) => JSON.parse(x) },
     },
   }) as unknown as PgSql;
   const db = wrap(sql);

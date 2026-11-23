@@ -9,7 +9,7 @@ import { freeSlots } from './scheduler';
 import { createTaskFor } from './tasks';
 import { addDays, formatDateDe, isValidDate, isValidTime, todayIn, utcToZoned, weekdayOf, WEEKDAYS_DE, zonedToUtc } from './time';
 import { CATEGORIES, CATEGORY_META, TASK_KIND_LABELS, type Category, type TaskKind, type User } from './types';
-import { aiCanWrite, ensureVault, normalizePath, readVault, readVaultFile } from './vault';
+import { aiCanWrite, CLOQI_IDENTITY, ensureVault, normalizePath, readVault, readVaultFile } from './vault';
 import { useQuota } from './limits';
 
 // CLOQI AI: a tool-using agent on any OpenAI-compatible chat API
@@ -42,6 +42,7 @@ interface Ctx {
 
 /** What a streaming client receives while CLOQI works (NDJSON lines, see lib/ai-stream.ts). */
 export type StreamEvent =
+  | { type: 'thread'; id: string }     // conversation id (sent first, so a client can come back to it)
   | { type: 'status'; text: string }   // e.g. "Schaut in deinen Kalender …"
   | { type: 'delta'; text: string }    // next piece of the answer
   | { type: 'reset' }                  // discard streamed text (the model continued with tools)
@@ -316,7 +317,8 @@ async function systemPrompt(user: User): Promise<string> {
     .filter(i => i.status !== 'missed').slice(0, 80)
     .map(i => `- ${utcToZoned(i.startAt, tz).date} ${i.allDay ? 'ganztägig' : `${utcToZoned(i.startAt, tz).time}–${utcToZoned(i.endAt, tz).time}`} ${quoted(i.title)} [${i.kind}, ${CATEGORY_META[i.category].label}${i.status !== 'active' && i.status !== 'planned' ? `, ${i.status}` : ''}${i.readOnly ? ', nur lesen' : ''}] id=${i.id}${i.occurrenceDate ? ` occ=${i.occurrenceDate}` : ''}`);
 
-  return `Du bist CLOQI, der persönliche Kalender-Assistent von ${user.name || 'deinem Nutzer'} – wie ein sehr guter, mitdenkender Assistent, der den ganzen Alltag organisiert.
+  return `Du bist CLOQI, der persönliche Kalender-Assistent von ${user.name || 'deinem Nutzer'}. ${CLOQI_IDENTITY.who.replace(/^CLOQI ist dein persönlicher Kalender-Assistent – /, '')}
+Du hilfst so: ${CLOQI_IDENTITY.helps.join('; ')}.
 
 JETZT: ${WEEKDAYS_DE[z.weekday - 1]}, ${today}, ${z.time} Uhr (${tz}).
 KALENDERTAGE (verwende diese, rechne Daten nicht selbst): ${days}
@@ -333,6 +335,7 @@ ARBEITSWEISE
 - Lösche nur, wenn der Nutzer es in seiner aktuellen Nachricht ausdrücklich verlangt.
 - Erfinde keine Termine oder Daten. Nutze get_calendar, wenn du etwas nicht weißt.
 - Antworte auf Deutsch, kurz, freundlich und per Du (außer soul.md sagt etwas anderes). Fasse am Ende zusammen, was du eingetragen oder geändert hast.
+- Formatierung: schreib wie in einer Chat-Nachricht. **Fett** nur für einzelne wirklich wichtige Wörter (z. B. ein Datum), höchstens zwei- bis dreimal pro Antwort. Aufzählungen mit „- “. Keine Überschriften, keine Tabellen, kein Code.
 
 === soul.md (wie der Nutzer betreut werden will) ===
 ${await read('soul.md', 3000)}
@@ -582,6 +585,7 @@ export async function runAgent(user: User, message: string, opts: { threadId?: s
   if (existing && !(await getThread(user.id, existing))) throw new Error('Dieser Chat existiert nicht mehr.');
   const history = existing ? (await listChat(user.id, existing, 16)).map(m => ({ role: m.role, content: m.content })) : [];
   const threadId = existing ?? await createThread(user.id, message.replace(/\s+/g, ' ').slice(0, 60) || (files.length ? 'Anhang' : 'Neuer Chat'));
+  opts.emit?.({ type: 'thread', id: threadId });
 
   const system = await systemPrompt(user);
   const ctx: Ctx = { actions: [], userMessage: message, emit: opts.emit };

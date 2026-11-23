@@ -9,12 +9,13 @@ import {
 } from 'lucide-react';
 import { askCloqi, confirmProposal, type Proposal } from '@/app/actions/assistant';
 import { deleteThreadAction, listThreadsAction, openThreadAction, transcribeAction } from '@/app/actions/ai';
+import { Markdown } from '@/components/Markdown';
 import { MascotAvatar, type MascotName } from '@/components/Mascot';
 import { toast, toastResult } from '@/components/Toaster';
 import { useRecorder } from '@/components/useRecorder';
 
 interface Msg { id: string | number; from: 'user' | 'cloqi'; text: string; proposal?: Proposal; confirmLabel?: string; resolved?: boolean; actions?: string[]; error?: boolean; status?: string; streaming?: boolean }
-type StreamEvent = { type: 'status'; text: string } | { type: 'delta'; text: string } | { type: 'reset' } | { type: 'done'; ok: boolean; reply: string; actions: string[]; threadId: string | null };
+type StreamEvent = { type: 'thread'; id: string } | { type: 'status'; text: string } | { type: 'delta'; text: string } | { type: 'reset' } | { type: 'done'; ok: boolean; reply: string; actions: string[]; threadId: string | null };
 interface Attachment { name: string; mime: string; data: string; preview?: string }
 interface Thread { id: string; title: string; updatedAt: string }
 
@@ -25,6 +26,18 @@ const STARTERS = [
   { icon: Clock3, label: 'Freie Zeit diese Woche', text: 'Wann habe ich diese Woche Zeit für Freunde?' },
 ];
 const MAX_FILES = 4;
+
+// The current conversation survives switching tabs (sessionStorage of this browser tab).
+const CURRENT = 'cloqi:chat';
+const remember = (id: string | null) => {
+  try { if (id) sessionStorage.setItem(CURRENT, JSON.stringify({ id, at: Date.now() })); else sessionStorage.removeItem(CURRENT); } catch { /* storage blocked */ }
+};
+const remembered = (): string | null => {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(CURRENT) ?? 'null') as { id: string; at: number } | null;
+    return v && Date.now() - v.at < 6 * 3600_000 ? v.id : null;
+  } catch { return null; }
+};
 
 /** Photos are scaled down in the browser (max 1600 px, JPEG) – faster, cheaper, enough for the AI. */
 async function readAttachment(file: File): Promise<Attachment> {
@@ -74,6 +87,36 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
     html.style.overscrollBehaviorY = 'none'; body.style.overscrollBehaviorY = 'none';
     return () => { html.style.overscrollBehaviorY = prev[0]; body.style.overscrollBehaviorY = prev[1]; };
   }, [messages.length]);
+  // coming back to the AI tab: reopen the current conversation; if CLOQI is still answering, wait for it
+  useEffect(() => {
+    const id = remembered();
+    if (!id) return;
+    let alive = true;
+    (async () => {
+      const r = await openThreadAction(id);
+      if (!alive) return;
+      if (!r.ok) { remember(null); return; }
+      setThreadId(id);
+      const toMsgs = (ms: typeof r.messages): Msg[] => ms.map(m => ({ id: m.id, from: m.role === 'user' ? 'user' : 'cloqi', text: m.content }));
+      const waiting = r.messages.length > 0 && r.messages[r.messages.length - 1].role === 'user';
+      setMessages(waiting ? [...toMsgs(r.messages), { id: 'pending', from: 'cloqi', text: '', status: 'CLOQI antwortet noch …', streaming: true }] : toMsgs(r.messages));
+      // poll until the answer has been saved (max. ~3 minutes)
+      for (let i = 0; waiting && alive && i < 70; i++) {
+        await new Promise(res => setTimeout(res, 2500));
+        const again = await openThreadAction(id);
+        if (!alive) return;
+        if (again.ok && again.messages.length && again.messages[again.messages.length - 1].role === 'assistant') {
+          setMessages(toMsgs(again.messages));
+          router.refresh();
+          return;
+        }
+      }
+      if (waiting && alive) setMessages(m => m.map(x => (x.id === 'pending' ? { ...x, streaming: false, status: undefined, text: 'Die Antwort kam leider nicht an. Frag bitte nochmal.', error: true } : x)));
+    })().catch(() => undefined);
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => { // auto-grow the input
     const el = input.current;
     if (el) { el.style.height = 'auto'; el.style.height = `${Math.min(el.scrollHeight, 160)}px`; }
@@ -112,7 +155,8 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
               buf = buf.slice(i + 1);
               if (!line) continue;
               const e = JSON.parse(line) as StreamEvent;
-              if (e.type === 'status') patch(m => ({ ...m, status: e.text }));
+              if (e.type === 'thread') { setThreadId(e.id); remember(e.id); }
+              else if (e.type === 'status') patch(m => ({ ...m, status: e.text }));
               else if (e.type === 'delta') patch(m => ({ ...m, text: m.text + e.text, status: undefined }));
               else if (e.type === 'reset') patch(m => ({ ...m, text: '' }));
               else if (e.type === 'done') {
@@ -148,7 +192,7 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
     setMessages(m => [...m, { id: `a${++id.current}`, from: 'cloqi', text: r.reply }]);
   });
 
-  const newChat = () => { setMessages([]); setThreadId(null); setFiles([]); setText(''); setHistoryOpen(false); input.current?.focus(); };
+  const newChat = () => { setMessages([]); setThreadId(null); remember(null); setFiles([]); setText(''); setHistoryOpen(false); input.current?.focus(); };
 
   const openHistory = () => {
     setHistoryOpen(true);
@@ -158,6 +202,7 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
     const r = await openThreadAction(t.id);
     if (!r.ok) { toast('Dieser Chat existiert nicht mehr.', 'error'); return; }
     setThreadId(t.id);
+    remember(t.id);
     setMessages(r.messages.map(m => ({ id: m.id, from: m.role === 'user' ? 'user' : 'cloqi', text: m.content })));
     setHistoryOpen(false);
   });
@@ -232,7 +277,11 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
             <div className={`max-w-[85%] animate-rise rounded-2xl rounded-bl-md border px-4 py-3 text-sm shadow-card ${m.error ? 'border-danger/30 bg-danger-soft/60' : 'border-line bg-white'}`}>
               {m.streaming && !m.text
                 ? <p className="flex items-center gap-2 text-xs text-ink-soft"><Loader2 size={14} className="animate-spin text-leaf" />{m.status ?? 'Denkt nach …'}</p>
-                : <p className="whitespace-pre-line">{m.text}{m.streaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-leaf-dark align-text-bottom" />}</p>}
+                : <>
+                  {/* the AI writes light Markdown (**bold**, lists) – render it instead of showing the stars */}
+                  <Markdown text={m.text} compact onLink={target => router.push(`/vault?file=${encodeURIComponent(target)}`)} />
+                  {m.streaming && <span className="mt-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-leaf-dark" />}
+                </>}
               {m.actions && m.actions.length > 0 && (
                 <ul className="mt-3 space-y-1 border-t border-line pt-2">
                   {m.actions.map((a, i) => <li key={i} className="flex items-start gap-1.5 text-xs text-leaf-dark"><Sparkles size={12} className="mt-0.5 shrink-0" />{a}</li>)}
