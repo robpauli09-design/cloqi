@@ -31,7 +31,29 @@ export function aiConfig() {
 
 type Json = Record<string, unknown>;
 interface ToolDef { name: string; description: string; parameters: Json; run: (user: User, args: Json, ctx: Ctx) => Promise<unknown> }
-interface Ctx { actions: string[]; userMessage: string }
+interface Ctx {
+  actions: string[];
+  userMessage: string;
+  /** live updates for streaming clients (website/app) */
+  emit?: (e: StreamEvent) => void;
+  /** true when the final answer was already sent as text deltas */
+  streamed?: boolean;
+}
+
+/** What a streaming client receives while CLOQI works (NDJSON lines, see lib/ai-stream.ts). */
+export type StreamEvent =
+  | { type: 'status'; text: string }   // e.g. "Schaut in deinen Kalender …"
+  | { type: 'delta'; text: string }    // next piece of the answer
+  | { type: 'reset' }                  // discard streamed text (the model continued with tools)
+  | { type: 'done'; ok: boolean; reply: string; actions: string[]; threadId: string | null };
+
+const TOOL_STATUS: Record<string, string> = {
+  get_calendar: 'Schaut in deinen Kalender …', create_event: 'Trägt den Termin ein …', update_event: 'Verschiebt den Termin …',
+  delete_event: 'Löscht den Termin …', add_task: 'Trägt den Test ein und plant Lernblöcke …', replan_study: 'Plant deine Lernzeit neu …',
+  update_study_block: 'Passt den Lernblock an …', find_free_time: 'Sucht freie Zeit …', set_subject: 'Merkt sich dein Fach …',
+  vault_read: 'Liest in deinem Wissen …', vault_search: 'Sucht in deinem Wissen …', vault_write: 'Merkt sich das …',
+};
+const toolStatus = (name: string) => TOOL_STATUS[name] ?? 'Ich erledige das …';
 
 // Deleting is only allowed when the user's own chat message asks for it – instructions hidden in
 // imported calendar titles or vault files can never trigger a deletion on their own.
@@ -385,6 +407,61 @@ const dataUrl = (a: Attachment) => `data:${a.mime};base64,${a.data}`;
 
 type RItem = Record<string, unknown> & { type?: string };
 
+/** Server-sent events → parsed JSON objects. */
+async function* sseEvents(res: Response): AsyncGenerator<Record<string, unknown>> {
+  if (!res.body) return;
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true }).replace(/\r\n/g, '\n');
+    let i;
+    while ((i = buf.indexOf('\n\n')) >= 0) {
+      const chunk = buf.slice(0, i);
+      buf = buf.slice(i + 2);
+      const data = chunk.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trimStart()).join('\n');
+      if (!data || data === '[DONE]') continue;
+      try { yield JSON.parse(data) as Record<string, unknown>; } catch { /* ignore broken line */ }
+    }
+  }
+}
+
+type RResponse = { output?: RItem[]; status?: string };
+
+/** One Responses API call. Streams text deltas/tool status to ctx.emit when a client listens. */
+async function responsesStep(cfg: Cfg, payload: Record<string, unknown>, ctx: Ctx, stream: boolean): Promise<{ data: RResponse; streamedText: boolean }> {
+  const res = await fetch(`${cfg.base}/responses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.key}` },
+    signal: AbortSignal.timeout(110000),
+    body: JSON.stringify({ ...payload, ...(stream ? { stream: true } : {}) }),
+  });
+  if (!res.ok) await providerError(cfg, res, await res.text().catch(() => ''));
+  if (!stream) return { data: JSON.parse(await res.text()) as RResponse, streamedText: false };
+
+  let data: RResponse | null = null;
+  let streamedText = false;
+  for await (const ev of sseEvents(res)) {
+    const type = String(ev.type ?? '');
+    if (type === 'response.output_text.delta' && typeof ev.delta === 'string') {
+      ctx.emit?.({ type: 'delta', text: ev.delta });
+      streamedText = true;
+    } else if (type === 'response.output_item.added' && (ev.item as RItem | undefined)?.type === 'function_call') {
+      ctx.emit?.({ type: 'status', text: toolStatus(String((ev.item as RItem).name ?? '')) });
+    } else if (type === 'response.completed' || type === 'response.incomplete') {
+      data = (ev.response ?? null) as RResponse | null;
+    } else if (type === 'response.failed' || type === 'error') {
+      const err = (ev.response as { error?: { message?: string } } | undefined)?.error ?? (ev as { message?: string });
+      throw new Error(`Der KI-Dienst hat abgebrochen${err?.message ? `: ${String(err.message).slice(0, 160)}` : '.'}`);
+    }
+  }
+  if (!data) throw new StreamBroken();
+  return { data, streamedText };
+}
+class StreamBroken extends Error {}
+
 async function viaResponses(cfg: Cfg, user: User, system: string, history: { role: 'user' | 'assistant'; content: string }[], text: string, files: Attachment[], ctx: Ctx): Promise<string> {
   const input: RItem[] = [
     ...history.map(m => ({ role: m.role, content: m.content })),
@@ -399,32 +476,36 @@ async function viaResponses(cfg: Cfg, user: User, system: string, history: { rol
     },
   ];
   const tools = TOOLS.map(t => ({ type: 'function', name: t.name, description: t.description, parameters: t.parameters, strict: false }));
+  let stream = Boolean(ctx.emit);
   for (let step = 0; step < 8; step++) {
-    const res = await fetch(`${cfg.base}/responses`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.key}` },
-      signal: AbortSignal.timeout(110000),
-      body: JSON.stringify({
-        model: cfg.model, instructions: system, input, tools, store: false,
-        reasoning: { effort: cfg.effort || 'medium' },
-      }),
-    });
-    const body = await res.text().catch(() => '');
-    if (!res.ok) await providerError(cfg, res, body);
-    const data = JSON.parse(body) as { output?: RItem[]; status?: string };
-    const output = data.output ?? [];
+    const payload = { model: cfg.model, instructions: system, input, tools, store: false, reasoning: { effort: cfg.effort || 'medium' } };
+    let r: { data: RResponse; streamedText: boolean };
+    try {
+      r = await responsesStep(cfg, payload, ctx, stream);
+    } catch (e) {
+      if (!(e instanceof StreamBroken)) throw e;
+      // safety net: if streaming ever breaks, fetch this step the normal way
+      ctx.emit?.({ type: 'reset' });
+      stream = false;
+      r = await responsesStep(cfg, payload, ctx, false);
+    }
+    const output = r.data.output ?? [];
     input.push(...output); // replay everything (incl. reasoning) – required for thinking + tools without storage
     const calls = output.filter(o => o.type === 'function_call') as (RItem & { call_id: string; name: string; arguments: string })[];
     if (!calls.length) {
       const reply = output.filter(o => o.type === 'message')
         .flatMap(o => (o.content as { type: string; text?: string }[] | undefined) ?? [])
         .filter(c => c.type === 'output_text').map(c => c.text ?? '').join('\n').trim();
-      if (!reply && data.status === 'incomplete') return 'Das war zu viel auf einmal – frag mich bitte etwas kürzer.';
+      ctx.streamed = r.streamedText;
+      if (!reply && r.data.status === 'incomplete') return 'Das war zu viel auf einmal – frag mich bitte etwas kürzer.';
       return reply;
     }
+    if (r.streamedText) ctx.emit?.({ type: 'reset' }); // text before tool calls is not the final answer
     for (const call of calls) {
+      if (!stream) ctx.emit?.({ type: 'status', text: toolStatus(call.name) });
       input.push({ type: 'function_call_output', call_id: call.call_id, output: await runTool(user, call.name, call.arguments, ctx) });
     }
+    ctx.emit?.({ type: 'status', text: 'Denkt nach …' });
   }
   return '';
 }
@@ -480,6 +561,7 @@ async function viaChat(cfg: Cfg, user: User, system: string, history: { role: 'u
     messages.push({ role: 'assistant', content: msg.content ?? null, tool_calls: msg.tool_calls });
     if (!msg.tool_calls?.length) return typeof msg.content === 'string' ? msg.content : '';
     for (const call of msg.tool_calls) {
+      ctx.emit?.({ type: 'status', text: toolStatus(call.function.name) });
       messages.push({ role: 'tool', tool_call_id: call.id, content: await runTool(user, call.function.name, call.function.arguments, ctx) });
     }
   }
@@ -491,7 +573,7 @@ async function viaChat(cfg: Cfg, user: User, system: string, history: { role: 'u
 export interface AgentResult { reply: string; actions: string[]; threadId: string }
 
 /** One user turn in a conversation (new conversation when threadId is null). */
-export async function runAgent(user: User, message: string, opts: { threadId?: string | null; attachments?: Attachment[] } = {}): Promise<AgentResult> {
+export async function runAgent(user: User, message: string, opts: { threadId?: string | null; attachments?: Attachment[]; emit?: Ctx['emit'] } = {}): Promise<AgentResult> {
   const cfg = aiConfig();
   if (!cfg) throw new Error('KI ist nicht eingerichtet.');
   await ensureVault(user);
@@ -502,7 +584,8 @@ export async function runAgent(user: User, message: string, opts: { threadId?: s
   const threadId = existing ?? await createThread(user.id, message.replace(/\s+/g, ' ').slice(0, 60) || (files.length ? 'Anhang' : 'Neuer Chat'));
 
   const system = await systemPrompt(user);
-  const ctx: Ctx = { actions: [], userMessage: message };
+  const ctx: Ctx = { actions: [], userMessage: message, emit: opts.emit };
+  ctx.emit?.({ type: 'status', text: 'Denkt nach …' });
   const text = message || 'Was siehst du auf dem Anhang? Trag ein, was für meinen Kalender wichtig ist.';
   await addChat(user.id, threadId, 'user', files.length ? `${message}${message ? '\n' : ''}📎 ${files.map(f => f.name).join(', ')}` : message);
 
@@ -510,6 +593,7 @@ export async function runAgent(user: User, message: string, opts: { threadId?: s
     ? await viaResponses(cfg, user, system, history, text, files, ctx)
     : await viaChat(cfg, user, system, history, text, files, ctx);
   if (!reply) reply = ctx.actions.length ? 'Erledigt!' : 'Das habe ich leider nicht geschafft. Versuch es bitte anders formuliert.';
+  if (!ctx.streamed) ctx.emit?.({ type: 'delta', text: reply }); // providers without streaming: whole answer at once
   await addChat(user.id, threadId, 'assistant', reply);
   return { reply, actions: ctx.actions, threadId };
 }
@@ -537,7 +621,7 @@ export function cleanAttachments(raw: unknown): Attachment[] {
 }
 
 /** One chat turn for a user – used by the website and the app. */
-export async function chatFor(user: User, message: string, opts: { threadId?: string | null; attachments?: unknown } = {}): Promise<ChatReply> {
+export async function chatFor(user: User, message: string, opts: { threadId?: string | null; attachments?: unknown; emit?: Ctx['emit'] } = {}): Promise<ChatReply> {
   const threadId = opts.threadId ?? null;
   const text = String(message ?? '').trim().slice(0, 2000);
   let files: Attachment[];
@@ -551,7 +635,7 @@ export async function chatFor(user: User, message: string, opts: { threadId?: st
   const limited = await useQuota(user.id, 'ai');
   if (limited) return { ok: false, reply: limited, actions: [], threadId };
   try {
-    const r = await runAgent(user, text, { threadId, attachments: files });
+    const r = await runAgent(user, text, { threadId, attachments: files, emit: opts.emit });
     return { ok: true, reply: r.reply, actions: r.actions, threadId: r.threadId };
   } catch (e) {
     return { ok: false, reply: e instanceof Error ? e.message : 'Da ist etwas schiefgelaufen.', actions: [], threadId };

@@ -105,4 +105,43 @@ export async function api<T>(path: string, init: { method?: string; body?: unkno
   return data as T;
 }
 
+/** Events of a streamed CLOQI AI answer (same as the website, see lib/ai.ts StreamEvent). */
+export type StreamEvent =
+  | { type: 'status'; text: string }
+  | { type: 'delta'; text: string }
+  | { type: 'reset' }
+  | { type: 'done'; ok: boolean; reply: string; actions: string[]; threadId: string | null };
+
+/**
+ * POSTs to a streaming endpoint and calls onEvent for every NDJSON line as it arrives.
+ * Falls back to reading the whole response at once where streaming isn't available.
+ */
+export async function apiStream(path: string, body: unknown, onEvent: (e: StreamEvent) => void): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api/mobile${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/x-ndjson', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new ApiError('Keine Verbindung. Bist du online?', 0);
+  }
+  if (res.status === 401 && token) onUnauthorized?.();
+  if (!res.ok) throw new ApiError(((await res.json().catch(() => ({}))) as { error?: string }).error ?? `Fehler ${res.status}`, res.status);
+  const handle = (line: string) => { const l = line.trim(); if (l) { try { onEvent(JSON.parse(l) as StreamEvent); } catch { /* ignore */ } } };
+  const reader = res.body?.getReader?.();
+  if (!reader || typeof TextDecoder === 'undefined') { (await res.text()).split('\n').forEach(handle); return; }
+  const dec = new TextDecoder();
+  let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.indexOf('\n')) >= 0) { handle(buf.slice(0, i)); buf = buf.slice(i + 1); }
+  }
+  handle(buf);
+}
+
 export const errorText = (e: unknown) => (e instanceof Error ? e.message : 'Da ist etwas schiefgelaufen.');

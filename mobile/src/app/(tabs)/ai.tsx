@@ -8,7 +8,7 @@ import * as Haptics from 'expo-haptics';
 import {
   RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState,
 } from 'expo-audio';
-import { api, errorText, type ChatMessage } from '@/api';
+import { api, apiStream, errorText, type ChatMessage } from '@/api';
 import { useAuth } from '@/auth';
 import { Mascot } from '@/components/Mascot';
 import { T } from '@/components/ui';
@@ -25,7 +25,7 @@ const STARTERS: { icon: React.ComponentProps<typeof Ionicons>['name']; label: st
 const BARS = 28;
 const MAX_RECORD_MS = 180_000;
 
-type Msg = ChatMessage & { actions?: string[]; failed?: boolean };
+type Msg = ChatMessage & { actions?: string[]; failed?: boolean; status?: string; streaming?: boolean };
 interface Thread { id: string; title: string; updatedAt: string }
 
 export default function Ai() {
@@ -52,7 +52,7 @@ export default function Ai() {
   useEffect(() => {
     api<{ enabled: boolean }>('/ai').then(r => setEnabled(r.enabled)).catch(() => {});
   }, []);
-  useEffect(() => { setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50); }, [messages.length, busy]);
+  useEffect(() => { setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50); }, [messages, busy]);
 
   const stopRecorder = useCallback(async () => {
     setRecording(false);
@@ -88,15 +88,27 @@ export default function Ai() {
     setText(''); setFiles([]);
     setMessages(m => [...m, { id: `u${Date.now()}`, role: 'user', content: message + (sending.length ? `${message ? '\n' : ''}📎 ${sending.map(f => f.name).join(', ')}` : '') }]);
     setBusy(true);
+    // the answer is streamed: status first ("Schaut in deinen Kalender …"), then the text piece by piece
+    const aid = `a${Date.now()}`;
+    const patch = (f: (m: Msg) => Msg) => setMessages(ms => ms.map(m => (m.id === aid ? f(m) : m)));
+    setMessages(m => [...m, { id: aid, role: 'assistant', content: '', status: 'Denkt nach …', streaming: true }]);
+    let finished = false;
     try {
-      const r = await api<{ ok: boolean; reply: string; actions: string[]; threadId: string | null }>('/ai', {
-        method: 'POST', body: { message, threadId, attachments: sending.map(({ name, mime, data }) => ({ name, mime, data })) },
+      await apiStream('/ai/stream', { message, threadId, attachments: sending.map(({ name, mime, data }) => ({ name, mime, data })) }, e => {
+        if (e.type === 'status') patch(m => ({ ...m, status: e.text }));
+        else if (e.type === 'delta') patch(m => ({ ...m, content: m.content + e.text, status: undefined }));
+        else if (e.type === 'reset') patch(m => ({ ...m, content: '' }));
+        else if (e.type === 'done') {
+          finished = true;
+          if (e.threadId) setThreadId(e.threadId);
+          setHistory(null);
+          patch(m => ({ ...m, content: e.reply, actions: e.actions, failed: !e.ok, streaming: false, status: undefined }));
+          if (e.ok) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        }
       });
-      if (r.threadId) setThreadId(r.threadId);
-      setHistory(null);
-      setMessages(m => [...m, { id: `a${Date.now()}`, role: 'assistant', content: r.reply, actions: r.actions, failed: !r.ok }]);
+      if (!finished) throw new Error('Die Verbindung wurde unterbrochen. Versuch es bitte nochmal.');
     } catch (e) {
-      setMessages(m => [...m, { id: `e${Date.now()}`, role: 'assistant', content: errorText(e), failed: true }]);
+      patch(m => ({ ...m, content: errorText(e), failed: true, streaming: false, status: undefined }));
     } finally { setBusy(false); }
   }, [busy, files, threadId]);
 
@@ -192,7 +204,9 @@ export default function Ai() {
           }
           renderItem={({ item }) => (
             <View style={[st.bubble, item.role === 'user' ? st.mine : st.theirs, item.failed && { backgroundColor: colors.dangerSoft }]}>
-              <T style={item.role === 'user' ? { color: colors.white } : undefined}>{item.content}</T>
+              {item.streaming && !item.content
+                ? <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}><ActivityIndicator color={colors.leaf} /><T variant="muted">{item.status ?? 'Denkt nach …'}</T></View>
+                : <T style={item.role === 'user' ? { color: colors.white } : undefined}>{item.content}{item.streaming && <T style={{ color: colors.leaf }}> ▍</T>}</T>}
               {!!item.actions?.length && (
                 <View style={{ gap: 4, marginTop: 8 }}>
                   {item.actions.map((a, i) => <T key={i} variant="small" style={st.action}>✓ {a}</T>)}
@@ -200,7 +214,6 @@ export default function Ai() {
               )}
             </View>
           )}
-          ListFooterComponent={busy ? <View style={[st.bubble, st.theirs, { flexDirection: 'row', gap: 8, alignItems: 'center' }]}><ActivityIndicator color={colors.leaf} /><T variant="muted">CLOQI denkt nach …</T></View> : undefined}
         />
 
         <View style={st.composer}>

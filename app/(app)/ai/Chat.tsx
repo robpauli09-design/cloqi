@@ -8,12 +8,13 @@ import {
   Sparkles, SquarePen, Sun, Trash2, X,
 } from 'lucide-react';
 import { askCloqi, confirmProposal, type Proposal } from '@/app/actions/assistant';
-import { chatWithCloqi, deleteThreadAction, listThreadsAction, openThreadAction, transcribeAction } from '@/app/actions/ai';
+import { deleteThreadAction, listThreadsAction, openThreadAction, transcribeAction } from '@/app/actions/ai';
 import { MascotAvatar, type MascotName } from '@/components/Mascot';
 import { toast, toastResult } from '@/components/Toaster';
 import { useRecorder } from '@/components/useRecorder';
 
-interface Msg { id: string | number; from: 'user' | 'cloqi'; text: string; proposal?: Proposal; confirmLabel?: string; resolved?: boolean; actions?: string[]; error?: boolean }
+interface Msg { id: string | number; from: 'user' | 'cloqi'; text: string; proposal?: Proposal; confirmLabel?: string; resolved?: boolean; actions?: string[]; error?: boolean; status?: string; streaming?: boolean }
+type StreamEvent = { type: 'status'; text: string } | { type: 'delta'; text: string } | { type: 'reset' } | { type: 'done'; ok: boolean; reply: string; actions: string[]; threadId: string | null };
 interface Attachment { name: string; mime: string; data: string; preview?: string }
 interface Thread { id: string; title: string; updatedAt: string }
 
@@ -55,6 +56,8 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
   const [threads, setThreads] = useState<Thread[] | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [pending, start] = useTransition();
+  const [streaming, setStreaming] = useState(false);
+  const busy = pending || streaming;
   const id = useRef(0);
   const bottom = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLTextAreaElement>(null);
@@ -63,7 +66,7 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
   const docs = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const voice = useRecorder();
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }, [messages, pending]);
+  useEffect(() => { bottom.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth', block: 'end' }); }, [messages, pending, streaming]);
   useEffect(() => { // empty chat fits the screen: no rubber-band scrolling (iPhone) while nothing is written
     if (messages.length) return;
     const html = document.documentElement, body = document.body;
@@ -82,15 +85,55 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
     const sending = files;
     setMessages(m => [...m, { id: `u${++id.current}`, from: 'user', text: t + (sending.length ? `${t ? '\n' : ''}📎 ${sending.map(f => f.name).join(', ')}` : '') }]);
     setText(''); setFiles([]); setMenu(false);
+    if (aiEnabled) {
+      // answer is streamed: status first ("Schaut in deinen Kalender …"), then the text piece by piece
+      const aid = `a${++id.current}`;
+      const patch = (f: (m: Msg) => Msg) => setMessages(ms => ms.map(m => (m.id === aid ? f(m) : m)));
+      setMessages(m => [...m, { id: aid, from: 'cloqi', text: '', status: 'Denkt nach …', streaming: true }]);
+      setStreaming(true);
+      void (async () => {
+        let finished = false;
+        try {
+          const res = await fetch('/api/ai/stream', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: t, threadId, attachments: sending.map(({ name, mime, data }) => ({ name, mime, data })) }),
+          });
+          if (!res.ok || !res.body) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'Da ist etwas schiefgelaufen.');
+          const reader = res.body.getReader();
+          const dec = new TextDecoder();
+          let buf = '';
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            let i;
+            while ((i = buf.indexOf('\n')) >= 0) {
+              const line = buf.slice(0, i).trim();
+              buf = buf.slice(i + 1);
+              if (!line) continue;
+              const e = JSON.parse(line) as StreamEvent;
+              if (e.type === 'status') patch(m => ({ ...m, status: e.text }));
+              else if (e.type === 'delta') patch(m => ({ ...m, text: m.text + e.text, status: undefined }));
+              else if (e.type === 'reset') patch(m => ({ ...m, text: '' }));
+              else if (e.type === 'done') {
+                finished = true;
+                if (e.threadId) setThreadId(e.threadId);
+                setThreads(null); // refresh history next time it opens
+                patch(m => ({ ...m, text: e.reply, actions: e.actions, error: !e.ok, streaming: false, status: undefined }));
+                if (e.actions.length) router.refresh();
+              }
+            }
+          }
+          if (!finished) throw new Error('Die Verbindung wurde unterbrochen. Versuch es bitte nochmal.');
+        } catch (err) {
+          patch(m => ({ ...m, text: err instanceof Error ? err.message : 'Da ist etwas schiefgelaufen.', error: true, streaming: false, status: undefined }));
+        } finally {
+          setStreaming(false);
+        }
+      })();
+      return;
+    }
     start(async () => {
-      if (aiEnabled) {
-        const r = await chatWithCloqi(t, threadId, sending.map(({ name, mime, data }) => ({ name, mime, data })));
-        if (r.threadId) setThreadId(r.threadId);
-        setThreads(null); // refresh history next time it opens
-        setMessages(m => [...m, { id: `a${++id.current}`, from: 'cloqi', text: r.reply, actions: r.actions, error: !r.ok }]);
-        if (r.actions.length) router.refresh();
-        return;
-      }
       // fallback without a language model: rule-based commands with confirmation
       const q = /wann soll ich .*lernen/i.test(t) ? 'Wann habe ich Zeit zum Lernen?' : t;
       const r = await askCloqi(q);
@@ -151,7 +194,7 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
     if (r.ok && r.text) { setText(t => (t ? `${t} ${r.text}` : r.text!)); input.current?.focus(); } else toast(r.error ?? 'Spracherkennung fehlgeschlagen.', 'error');
   };
 
-  const canSend = Boolean(text.trim() || files.length) && !pending;
+  const canSend = Boolean(text.trim() || files.length) && !busy;
   const iconBtn = 'grid h-9 w-9 place-items-center rounded-xl text-ink-soft transition hover:bg-white hover:text-leaf-dark';
 
   return (
@@ -187,7 +230,9 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
           <div key={m.id} className="flex items-end gap-2">
             <MascotAvatar name={mascot} size={32} />
             <div className={`max-w-[85%] animate-rise rounded-2xl rounded-bl-md border px-4 py-3 text-sm shadow-card ${m.error ? 'border-danger/30 bg-danger-soft/60' : 'border-line bg-white'}`}>
-              <p className="whitespace-pre-line">{m.text}</p>
+              {m.streaming && !m.text
+                ? <p className="flex items-center gap-2 text-xs text-ink-soft"><Loader2 size={14} className="animate-spin text-leaf" />{m.status ?? 'Denkt nach …'}</p>
+                : <p className="whitespace-pre-line">{m.text}{m.streaming && <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-leaf-dark align-text-bottom" />}</p>}
               {m.actions && m.actions.length > 0 && (
                 <ul className="mt-3 space-y-1 border-t border-line pt-2">
                   {m.actions.map((a, i) => <li key={i} className="flex items-start gap-1.5 text-xs text-leaf-dark"><Sparkles size={12} className="mt-0.5 shrink-0" />{a}</li>)}
@@ -275,7 +320,7 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
               {canSend ? (
                 <button className="grid h-10 w-10 shrink-0 animate-pop place-items-center rounded-full bg-leaf-dark text-white" aria-label="Senden"><ArrowUp size={19} /></button>
               ) : (
-                <button type="button" onClick={() => void startVoice()} disabled={!aiEnabled || pending} aria-label="Sprechen" title="Sprechen"
+                <button type="button" onClick={() => void startVoice()} disabled={!aiEnabled || busy} aria-label="Sprechen" title="Sprechen"
                   className="grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-soft transition hover:bg-paper hover:text-leaf-dark disabled:opacity-40">
                   <Mic size={20} />
                 </button>
