@@ -6,7 +6,7 @@ import { exportUserData } from '@/lib/repo';
 export async function GET() {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: 'Nicht angemeldet' }, { status: 401 });
-  return new NextResponse(JSON.stringify(exportUserData(user.id), null, 2), {
+  return new NextResponse(JSON.stringify(await exportUserData(user.id), null, 2), {
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
       'Content-Disposition': `attachment; filename="cloqi-daten-${new Date().toISOString().slice(0, 10)}.json"`,

@@ -2,7 +2,7 @@ import 'server-only';
 import { decrypt } from './crypto';
 import { parseIcs, type IcsEvent } from './ics';
 import {
-  addSuggestion, calendarOfKind, createCalendar, createEvent, eventsBySource, getConnection, listCalendars, markConnectionSync, updateEvent,
+  addSuggestion, calendarOfKind, createEvent, eventsBySource, getConnection, markConnectionSync, updateEvent,
 } from './repo';
 import { formatDateDe, utcToZoned } from './time';
 import type { Category, User } from './types';
@@ -73,16 +73,14 @@ export interface ImportStats { imported: number; updated: number; cancelled: num
  * Upserts events from a calendar feed for one source. Future lessons that are newly cancelled,
  * moved or get a new room create suggestions (only for WebUntis).
  */
-export function upsertFeedEvents(
+export async function upsertFeedEvents(
   user: User, source: 'webuntis' | 'ics', connectionId: string | null, events: IcsEvent[], category: Category, now = new Date(),
-): ImportStats {
+): Promise<ImportStats> {
   const tz = user.timezone;
   const nowIso = now.toISOString();
   const keepFrom = new Date(now.getTime() - 14 * 86400000).toISOString();
-  const calendarId = source === 'webuntis'
-    ? (listCalendars(user.id).find(c => c.kind === 'webuntis')?.id ?? createCalendar(user.id, { name: 'WebUntis', color: '#286B24', kind: 'webuntis', connectionId, writable: false }))
-    : calendarOfKind(user.id, 'ics').id;
-  const existing = new Map(eventsBySource(user.id, source).filter(e => e.connectionId === connectionId).map(e => [e.externalUid!, e]));
+  const calendarId = (await calendarOfKind(user.id, source === 'webuntis' ? 'webuntis' : 'ics', connectionId)).id;
+  const existing = new Map((await eventsBySource(user.id, source)).filter(e => e.connectionId === connectionId).map(e => [e.externalUid!, e]));
   const seen = new Set<string>();
   const stats: ImportStats = { imported: 0, updated: 0, cancelled: 0, removed: 0 };
   let maxEnd = nowIso;
@@ -103,26 +101,26 @@ export function upsertFeedEvents(
     const whenText = `${formatDateDe(when.date, { weekday: true })}, ${when.time} Uhr`;
 
     if (!old) {
-      createEvent(user.id, { ...fields, category, source, externalUid: ev.uid, connectionId, calendarId });
+      await createEvent(user.id, { ...fields, category, source, externalUid: ev.uid, connectionId, calendarId });
       stats.imported++;
       if (status === 'cancelled') stats.cancelled++;
       continue;
     }
     const changed = old.startAt !== startAt || old.endAt !== endAt || old.location !== fields.location || old.status !== status || old.title !== fields.title;
     if (!changed) continue;
-    updateEvent(user.id, old.id, fields);
+    await updateEvent(user.id, old.id, fields);
     stats.updated++;
     if (source !== 'webuntis' || startAt < nowIso) continue;
     if (status === 'cancelled' && old.status !== 'cancelled') {
       stats.cancelled++;
-      addSuggestion(user.id, 'cancellation',
+      await addSuggestion(user.id, 'cancellation',
         `${fields.title} fällt ${whenText} aus. Möchtest du die freie Zeit zum Lernen nutzen?`,
         { action: 'use_free_slot', startAt, endAt, title: fields.title }, `cancel:${ev.uid}:${startAt}`);
     } else if (old.startAt !== startAt || old.endAt !== endAt) {
-      addSuggestion(user.id, 'change', `${fields.title} wurde verschoben: jetzt ${whenText}. Ich habe deinen Kalender aktualisiert.`,
+      await addSuggestion(user.id, 'change', `${fields.title} wurde verschoben: jetzt ${whenText}. Ich habe deinen Kalender aktualisiert.`,
         { action: 'info' }, `move:${ev.uid}:${startAt}`);
     } else if (old.location !== fields.location && fields.location) {
-      addSuggestion(user.id, 'change', `Raumänderung: ${fields.title} am ${whenText} findet in ${fields.location} statt.`,
+      await addSuggestion(user.id, 'change', `Raumänderung: ${fields.title} am ${whenText} findet in ${fields.location} statt.`,
         { action: 'info' }, `room:${ev.uid}:${fields.location}`);
     }
   }
@@ -130,24 +128,24 @@ export function upsertFeedEvents(
   // Lessons that vanished from the feed inside the period it covers count as removed.
   for (const [uid, old] of existing) {
     if (seen.has(uid) || old.startAt < nowIso || old.startAt > maxEnd || old.status === 'cancelled') continue;
-    updateEvent(user.id, old.id, { status: 'cancelled' });
+    await updateEvent(user.id, old.id, { status: 'cancelled' });
     stats.removed++;
   }
   return stats;
 }
 
 export async function syncWebUntis(user: User, now = new Date()): Promise<ImportStats> {
-  const conn = getConnection(user.id, 'webuntis');
+  const conn = await getConnection(user.id, 'webuntis');
   if (!conn || !conn.secretEnc) throw new Error('WebUntis ist nicht verbunden.');
   try {
     const url = normalizeWebUntisUrl(decrypt(conn.secretEnc));
     const text = await fetchCalendar(url, isWebUntisHost);
     const events = parseIcs(text, user.timezone, new Date(now.getTime() + 120 * 86400000));
-    const stats = upsertFeedEvents(user, 'webuntis', conn.id, events, 'schule', now);
-    markConnectionSync(conn.id, null);
+    const stats = await upsertFeedEvents(user, 'webuntis', conn.id, events, 'schule', now);
+    await markConnectionSync(conn.id, null);
     return stats;
   } catch (e) {
-    markConnectionSync(conn.id, e instanceof Error ? e.message : 'Unbekannter Fehler');
+    await markConnectionSync(conn.id, e instanceof Error ? e.message : 'Unbekannter Fehler');
     throw e;
   }
 }

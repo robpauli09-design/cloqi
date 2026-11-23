@@ -71,13 +71,13 @@ async function tokenRequest(p: OAuthProvider, body: Record<string, string>): Pro
 
 export async function finishOAuth(user: User, p: OAuthProvider, code: string) {
   const t = await tokenRequest(p, { grant_type: 'authorization_code', code, redirect_uri: redirectUri(p) });
-  upsertConnection(user.id, p, {
+  await upsertConnection(user.id, p, {
     status: 'connected', accessTokenEnc: encrypt(t.access_token), refreshTokenEnc: t.refresh_token ? encrypt(t.refresh_token) : null,
     tokenExpiresAt: new Date(Date.now() + (t.expires_in - 60) * 1000).toISOString(),
   });
   const calendars = await listRemoteCalendars(user, p);
   const primary = calendars.find(c => c.primary) ?? calendars[0];
-  upsertConnection(user.id, p, {
+  await upsertConnection(user.id, p, {
     config: {
       availableCalendars: calendars,
       importCalendarIds: primary ? [primary.id] : [],
@@ -88,12 +88,12 @@ export async function finishOAuth(user: User, p: OAuthProvider, code: string) {
 }
 
 async function accessToken(user: User, p: OAuthProvider): Promise<string> {
-  const conn = getConnection(user.id, p);
+  const conn = await getConnection(user.id, p);
   if (!conn?.accessTokenEnc) throw new Error('Nicht verbunden.');
   if (conn.tokenExpiresAt && conn.tokenExpiresAt > new Date().toISOString()) return decrypt(conn.accessTokenEnc);
   if (!conn.refreshTokenEnc) throw new ExpiredError('Die Verbindung ist abgelaufen. Bitte neu verbinden.');
   const t = await tokenRequest(p, { grant_type: 'refresh_token', refresh_token: decrypt(conn.refreshTokenEnc), ...(p === 'outlook' ? { scope: config(p).scope } : {}) });
-  upsertConnection(user.id, p, {
+  await upsertConnection(user.id, p, {
     accessTokenEnc: encrypt(t.access_token), ...(t.refresh_token ? { refreshTokenEnc: encrypt(t.refresh_token) } : {}),
     tokenExpiresAt: new Date(Date.now() + (t.expires_in - 60) * 1000).toISOString(),
   });
@@ -102,7 +102,7 @@ async function accessToken(user: User, p: OAuthProvider): Promise<string> {
 
 /** Best effort: ask Google to revoke our token when the user disconnects. */
 export async function revokeAccess(user: User, p: OAuthProvider) {
-  const conn = getConnection(user.id, p);
+  const conn = await getConnection(user.id, p);
   if (p !== 'google' || !conn?.refreshTokenEnc) return;
   await fetch(`https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(decrypt(conn.refreshTokenEnc))}`, { method: 'POST', signal: AbortSignal.timeout(8000) }).catch(() => undefined);
 }
@@ -219,15 +219,15 @@ export const splitExternalUid = (uid: string) => { const i = uid.lastIndexOf('::
 export interface SyncStats { pushed: number; pulled: number; deleted: number; conflicts: number }
 
 /** Keeps the CLOQI calendars for the selected remote calendars in line with the connection config. */
-function syncCalendarList(user: User, connId: string, p: OAuthProvider, cfg: ConnectionConfig) {
+async function syncCalendarList(user: User, connId: string, p: OAuthProvider, cfg: ConnectionConfig) {
   const wanted = new Set(cfg.importCalendarIds ?? []);
-  const existing = calendarsForConnection(user.id, connId);
-  for (const c of existing) if (!wanted.has(c.externalId ?? '')) deleteCalendar(user.id, c.id);
+  const existing = await calendarsForConnection(user.id, connId);
+  for (const c of existing) if (!wanted.has(c.externalId ?? '')) await deleteCalendar(user.id, c.id);
   for (const rc of cfg.availableCalendars ?? []) {
     if (!wanted.has(rc.id) || existing.some(c => c.externalId === rc.id)) continue;
-    createCalendar(user.id, { name: `${rc.name}`, color: p === 'google' ? '#3B82F6' : '#2F6FDB', kind: p, connectionId: connId, externalId: rc.id, writable: rc.writable });
+    await createCalendar(user.id, { name: `${rc.name}`, color: p === 'google' ? '#3B82F6' : '#2F6FDB', kind: p, connectionId: connId, externalId: rc.id, writable: rc.writable });
   }
-  return calendarsForConnection(user.id, connId);
+  return await calendarsForConnection(user.id, connId);
 }
 
 /**
@@ -239,26 +239,26 @@ function syncCalendarList(user: User, connId: string, p: OAuthProvider, cfg: Con
  * No silent overwrites, no duplicates (stable external ids + sync_map).
  */
 export async function syncProvider(user: User, p: OAuthProvider, now = new Date()): Promise<SyncStats> {
-  const conn = getConnection(user.id, p);
+  const conn = await getConnection(user.id, p);
   if (!conn) throw new Error('Nicht verbunden.');
   const stats: SyncStats = { pushed: 0, pulled: 0, deleted: 0, conflicts: 0 };
   const from = new Date(now.getTime() - 7 * 86400000).toISOString();
   const to = new Date(now.getTime() + 90 * 86400000).toISOString();
   try {
     const cfg = conn.config;
-    const calendars = syncCalendarList(user, conn.id, p, cfg);
-    const map = getSyncMap(conn.id);
+    const calendars = await syncCalendarList(user, conn.id, p, cfg);
+    const map = await getSyncMap(conn.id);
     const ourExternalIds = new Map<string, [string, SyncEntry]>([...map].map(([k, v]) => [v.externalId, [k, v]]));
     const remoteById = new Map<string, RemoteEvent>();
 
     // ---- 1 + 2: imported calendars
-    const connEvents = eventsByConnection(user.id, conn.id);
+    const connEvents = await eventsByConnection(user.id, conn.id);
     // events created in CLOQI inside a connected calendar → create them remotely first
     for (const e of connEvents.filter(x => !x.externalUid && x.syncState === 'dirty')) {
       const cal = calendars.find(c => c.id === e.calendarId);
       if (!cal?.writable || !cal.externalId) continue;
       const remoteId = await createRemote(user, p, cal.externalId, e, false);
-      updateEvent(user.id, e.id, { externalUid: externalUid(cal.externalId, remoteId), syncState: 'clean', remoteVersion: null });
+      await updateEvent(user.id, e.id, { externalUid: externalUid(cal.externalId, remoteId), syncState: 'clean', remoteVersion: null });
       e.externalUid = externalUid(cal.externalId, remoteId);
       e.syncState = 'clean';
       stats.pushed++;
@@ -275,31 +275,31 @@ export async function syncProvider(user: User, p: OAuthProvider, now = new Date(
         const local = localImported.get(uid);
         const fields = { title: r.title.slice(0, 200), startAt: r.start, endAt: r.end, allDay: r.allDay, location: r.location, description: r.description?.slice(0, 2000) ?? null };
         if (!local) {
-          createEvent(user.id, { ...fields, category: 'privat', source: p, externalUid: uid, connectionId: conn.id, calendarId: cal.id, remoteVersion: r.version });
+          await createEvent(user.id, { ...fields, category: 'privat', source: p, externalUid: uid, connectionId: conn.id, calendarId: cal.id, remoteVersion: r.version });
           stats.pulled++;
           continue;
         }
         const remoteChanged = local.remoteVersion !== r.version;
         if (local.syncState === 'dirty' && remoteChanged) {
-          updateEvent(user.id, local.id, { syncState: 'conflict' });
-          addSuggestion(user.id, 'sync_conflict',
+          await updateEvent(user.id, local.id, { syncState: 'conflict' });
+          await addSuggestion(user.id, 'sync_conflict',
             `„${local.title}“ wurde in CLOQI und in ${PROVIDER_LABEL[p]} geändert. Welche Version soll gelten?`,
             { action: 'resolve_conflict', eventId: local.id, provider: p, remote: fields, remoteVersion: r.version }, `conflict:${local.id}:${r.version}`);
           stats.conflicts++;
         } else if (local.syncState === 'dirty' && cal.writable) {
           await updateRemote(user, p, cal.externalId!, r.id, local, false);
           const fresh = (await listRemoteEvents(user, p, cal.externalId!, local.startAt, local.endAt)).find(x => x.id === r.id);
-          updateEvent(user.id, local.id, { syncState: 'clean', remoteVersion: fresh?.version ?? r.version });
+          await updateEvent(user.id, local.id, { syncState: 'clean', remoteVersion: fresh?.version ?? r.version });
           stats.pushed++;
         } else if (remoteChanged && local.syncState === 'clean') {
-          updateEvent(user.id, local.id, { ...fields, remoteVersion: r.version });
+          await updateEvent(user.id, local.id, { ...fields, remoteVersion: r.version });
           stats.pulled++;
         }
       }
       // deleted remotely (inside the window) → delete locally unless the user changed it meanwhile
       for (const [uid, local] of localImported) {
         if (!uid.startsWith(`${cal.externalId}::`) || seen.has(uid) || local.startAt < from || local.startAt >= to) continue;
-        if (local.syncState === 'clean') { deleteEvent(user.id, local.id); stats.deleted++; }
+        if (local.syncState === 'clean') { await deleteEvent(user.id, local.id); stats.deleted++; }
       }
     }
 
@@ -310,7 +310,7 @@ export async function syncProvider(user: User, p: OAuthProvider, now = new Date(
         for (const r of await listRemoteEvents(user, p, exportCal, from, to)) remoteById.set(r.id, r);
       }
       const categories = new Set<Category>(cfg.exportCategories ?? []);
-      const items = getCalendarItems(user, from, to, { includeHidden: true }).filter(i =>
+      const items = (await getCalendarItems(user, from, to, { includeHidden: true })).filter(i =>
         categories.has(i.category) && i.source !== p && !['webuntis', 'ics', 'google', 'outlook'].includes(i.source) && i.kind !== 'lesson'
         && i.status !== 'cancelled' && i.status !== 'missed');
       const current = new Set<string>();
@@ -321,7 +321,7 @@ export async function syncProvider(user: User, p: OAuthProvider, now = new Date(
         const known = map.get(item.key);
         if (!known) {
           const id = await createRemote(user, p, exportCal, w);
-          setSyncMap(conn.id, item.key, id, localHash, item.startAt, exportCal);
+          await setSyncMap(conn.id, item.key, id, localHash, item.startAt, exportCal);
           stats.pushed++;
           continue;
         }
@@ -329,38 +329,38 @@ export async function syncProvider(user: User, p: OAuthProvider, now = new Date(
         const remoteMoved = remote && remoteHash(remote) !== known.hash;
         const localMoved = localHash !== known.hash;
         if (remoteMoved && !localMoved) {
-          if (applyRemoteToItem(user, item, remote!)) { setSyncMap(conn.id, item.key, known.externalId, remoteHash(remote!), remote!.start, exportCal); stats.pulled++; }
+          if (await applyRemoteToItem(user, item, remote!)) { await setSyncMap(conn.id, item.key, known.externalId, remoteHash(remote!), remote!.start, exportCal); stats.pulled++; }
           else {
-            addSuggestion(user.id, 'sync_conflict', `„${item.title}“ wurde in ${PROVIDER_LABEL[p]} geändert. Wiederkehrende CLOQI-Termine bitte direkt in CLOQI bearbeiten – ich habe die CLOQI-Version behalten.`,
+            await addSuggestion(user.id, 'sync_conflict', `„${item.title}“ wurde in ${PROVIDER_LABEL[p]} geändert. Wiederkehrende CLOQI-Termine bitte direkt in CLOQI bearbeiten – ich habe die CLOQI-Version behalten.`,
               { action: 'info' }, `remote-edit:${item.key}:${remote!.version}`);
             await updateRemote(user, p, exportCal, known.externalId, w);
-            setSyncMap(conn.id, item.key, known.externalId, localHash, item.startAt, exportCal);
+            await setSyncMap(conn.id, item.key, known.externalId, localHash, item.startAt, exportCal);
           }
         } else if (remoteMoved && localMoved) {
-          addSuggestion(user.id, 'sync_conflict', `„${item.title}“ wurde in CLOQI und in ${PROVIDER_LABEL[p]} unterschiedlich geändert. Die CLOQI-Version wurde nicht übertragen – bitte prüfen.`,
+          await addSuggestion(user.id, 'sync_conflict', `„${item.title}“ wurde in CLOQI und in ${PROVIDER_LABEL[p]} unterschiedlich geändert. Die CLOQI-Version wurde nicht übertragen – bitte prüfen.`,
             { action: 'info' }, `both-edit:${item.key}:${remote!.version}`);
           stats.conflicts++;
         } else if (localMoved) {
           const ok = remote === undefined && !(await remoteExists(user, p, exportCal, known.externalId))
             ? null : await updateRemote(user, p, exportCal, known.externalId, w);
-          if (!ok) setSyncMap(conn.id, item.key, await createRemote(user, p, exportCal, w), localHash, item.startAt, exportCal);
-          else setSyncMap(conn.id, item.key, known.externalId, localHash, item.startAt, exportCal);
+          if (!ok) await setSyncMap(conn.id, item.key, await createRemote(user, p, exportCal, w), localHash, item.startAt, exportCal);
+          else await setSyncMap(conn.id, item.key, known.externalId, localHash, item.startAt, exportCal);
           stats.pushed++;
         }
       }
       for (const [key, known] of map) {
         if (current.has(key) || known.startAt < from) continue;
         await deleteRemote(user, p, known.externalCalendarId || exportCal, known.externalId);
-        removeSyncMap(conn.id, key);
+        await removeSyncMap(conn.id, key);
         stats.deleted++;
       }
     }
 
-    markConnectionSync(conn.id, null);
+    await markConnectionSync(conn.id, null);
     return stats;
   } catch (e) {
-    markConnectionSync(conn.id, e instanceof Error ? e.message : 'Unbekannter Fehler');
-    if (e instanceof ExpiredError) upsertConnection(user.id, p, { status: 'expired' });
+    await markConnectionSync(conn.id, e instanceof Error ? e.message : 'Unbekannter Fehler');
+    if (e instanceof ExpiredError) await upsertConnection(user.id, p, { status: 'expired' });
     throw e;
   }
 }
@@ -371,16 +371,16 @@ async function remoteExists(user: User, p: OAuthProvider, calendarId: string, id
 }
 
 /** A CLOQI item was moved/renamed in the external calendar → apply where it is safe. */
-function applyRemoteToItem(user: User, item: CalendarItem, r: RemoteEvent): boolean {
+async function applyRemoteToItem(user: User, item: CalendarItem, r: RemoteEvent): Promise<boolean> {
   if (item.kind === 'study') {
-    if (!getBlock(user.id, item.id)) return false;
-    updateBlock(user.id, item.id, { startAt: r.start, endAt: r.end });
+    if (!await getBlock(user.id, item.id)) return false;
+    await updateBlock(user.id, item.id, { startAt: r.start, endAt: r.end });
     return true;
   }
   if (item.kind === 'event' && !item.recurring) {
-    const e = getEvent(user.id, item.id);
+    const e = await getEvent(user.id, item.id);
     if (!e) return false;
-    updateEvent(user.id, e.id, { title: r.title, startAt: r.start, endAt: r.end, location: r.location });
+    await updateEvent(user.id, e.id, { title: r.title, startAt: r.start, endAt: r.end, location: r.location });
     return true;
   }
   return false;
@@ -392,9 +392,9 @@ export async function resolveConflict(user: User, event: CalendarEvent, keep: 'c
   const p = event.source as OAuthProvider;
   const { calendarId, id } = splitExternalUid(event.externalUid);
   if (keep === 'remote') {
-    updateEvent(user.id, event.id, { ...remote, syncState: 'clean', remoteVersion: remote.version ?? null });
+    await updateEvent(user.id, event.id, { ...remote, syncState: 'clean', remoteVersion: remote.version ?? null });
     return;
   }
   await updateRemote(user, p, calendarId, id, event, false);
-  updateEvent(user.id, event.id, { syncState: 'clean', remoteVersion: null });
+  await updateEvent(user.id, event.id, { syncState: 'clean', remoteVersion: null });
 }

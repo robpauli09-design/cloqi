@@ -38,13 +38,13 @@ export async function authenticate(_prev: AuthState, form: FormData): Promise<Au
     if (mode === 'register') {
       if (password.length < 8) throw new InputError('Das Passwort braucht mindestens 8 Zeichen.');
       if (password.length > 200) throw new InputError('Das Passwort ist zu lang.');
-      if (findUserByEmail(mail)) throw new InputError('Für diese E-Mail gibt es schon einen Account. Melde dich an.');
-      const user = createUser(mail, await hashPassword(password), process.env.DEFAULT_TIMEZONE || DEFAULT_TZ);
+      if (await findUserByEmail(mail)) throw new InputError('Für diese E-Mail gibt es schon einen Account. Melde dich an.');
+      const user = await createUser(mail, await hashPassword(password), process.env.DEFAULT_TIMEZONE || DEFAULT_TZ);
       refund(keys[1], keys[2]); // the per-IP budget stays used up: no mass sign-ups
       await createSession(user.id);
       target = '/onboarding';
     } else {
-      const user = findUserByEmail(mail);
+      const user = await findUserByEmail(mail);
       // Same message for unknown e-mail and wrong password.
       const ok = user ? await verifyPassword(password, user.passwordHash) : await verifyPassword(password, 'scrypt$AAAAAAAAAAAAAAAAAAAAAA$AAAA');
       if (!user || !ok) throw new InputError('E-Mail oder Passwort stimmt nicht.');

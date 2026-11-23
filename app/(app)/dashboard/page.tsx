@@ -22,8 +22,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const user = await requireReadyUser();
   const { welcome } = await searchParams;
   const tz = user.timezone;
-  const d = buildDashboard(user);
-  const p = getProgress(user);
+  const d = await buildDashboard(user);
+  const p = await getProgress(user);
   const now = utcToZoned(new Date(), tz);
   const t = (iso: string) => utcToZoned(iso, tz).time;
   const name = user.name || 'du';

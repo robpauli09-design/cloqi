@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: 'Cycle' };
 
 export default async function CyclePage() {
   const user = await requireReadyUser();
-  if (!user.prefs.cycleEnabled || !hasCycleConsent(user.id)) {
+  if (!user.prefs.cycleEnabled || !await hasCycleConsent(user.id)) {
     return (
       <div className="card mx-auto max-w-xl p-8 text-center">
         <Mascot name="clea" variant="bust" size={140} className="mx-auto w-fit" />
@@ -23,7 +23,7 @@ export default async function CyclePage() {
     );
   }
   const today = todayIn(user.timezone);
-  const entries = listCycleEntries(user.id);
+  const entries = await listCycleEntries(user.id);
   const s = summarize(entries, today);
   const ovulation = s.lastStart ? addDays(s.lastStart, s.cycleLength - 14) : null;
   const start = addDays(today, 1 - weekdayOf(today));

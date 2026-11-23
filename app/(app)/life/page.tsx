@@ -19,16 +19,16 @@ export default async function LifePage() {
   const today = todayIn(tz);
   const now = new Date();
   const horizon = dayRange(addDays(today, 14), tz).from;
-  const routines = listEvents(user.id, now.toISOString(), horizon)
+  const routines = (await listEvents(user.id, now.toISOString(), horizon))
     .filter(e => e.recurrenceFreq && LIFE.has(e.category) && !['webuntis', 'ics'].includes(e.source));
-  const upcoming = getCalendarItems(user, now.toISOString(), horizon)
+  const upcoming = (await getCalendarItems(user, now.toISOString(), horizon))
     .filter(i => i.kind === 'event' && LIFE.has(i.category) && !i.recurring && i.status === 'active').slice(0, 10);
 
   const weekEnd = addDays(today, 7 - weekdayOf(today));
   const free: { day: string; slots: string[] }[] = [];
   for (let d = today; d <= weekEnd; d = addDays(d, 1)) {
     const { from, to } = dayRange(d, tz);
-    const slots = freeSlots(d, tz, busyIntervals(getCalendarItems(user, from, to, { includeHidden: true })),
+    const slots = freeSlots(d, tz, busyIntervals(await getCalendarItems(user, from, to, { includeHidden: true })),
       { ...user.prefs, studyStart: '14:00', studyEnd: '22:00', weekendStart: '09:00', weekendEnd: '22:00', studyOnSunday: true }, now)
       .filter(s => s.end - s.start >= 90 * 60000)
       .map(s => `${utcToZoned(new Date(s.start), tz).time}–${utcToZoned(new Date(s.end), tz).time}`);

@@ -17,7 +17,7 @@ import { category, date, fail, int, InputError, optionalText, text, time, type A
 const EXTERNAL = ['google', 'outlook'];
 const IMPORT_ONLY = ['webuntis', 'ics'];
 
-function readEventForm(user: User, form: FormData): EventInput {
+async function readEventForm(user: User, form: FormData): Promise<EventInput> {
   const title = text(form, 'title', { required: true, max: 120, label: 'Titel' });
   const day = date(form, 'date');
   const allDay = form.get('allDay') === 'on';
@@ -42,8 +42,8 @@ function readEventForm(user: User, form: FormData): EventInput {
   const until = String(form.get('until') ?? '');
   if (recurrenceFreq && until && (!isValidDate(until) || until < day)) throw new InputError('Das Ende der Wiederholung ist ungültig.');
 
-  const calendarId = String(form.get('calendarId') ?? '') || mainCalendarId(user.id);
-  const cal = getCalendar(user.id, calendarId);
+  const calendarId = String(form.get('calendarId') ?? '') || await mainCalendarId(user.id);
+  const cal = await getCalendar(user.id, calendarId);
   if (!cal || !cal.writable || ['study', 'timetable', 'webuntis', 'ics'].includes(cal.kind)) throw new InputError('In diesen Kalender kann nicht geschrieben werden.');
 
   return {
@@ -55,15 +55,15 @@ function readEventForm(user: User, form: FormData): EventInput {
   };
 }
 
-function conflictWarning(user: User, startAt: string, endAt: string, ignoreId?: string): string | undefined {
-  const items = getCalendarItems(user, startAt, endAt, { includeHidden: true }).filter(i => i.id !== ignoreId);
+async function conflictWarning(user: User, startAt: string, endAt: string, ignoreId?: string): Promise<string | undefined> {
+  const items = (await getCalendarItems(user, startAt, endAt, { includeHidden: true })).filter(i => i.id !== ignoreId);
   const probe = { key: 'probe', kind: 'event', id: 'probe', title: '', startAt, endAt, allDay: false, status: 'active' } as CalendarItem;
   const hits = findConflicts([...items, probe]).filter(c => c.a.key === 'probe' || c.b.key === 'probe').map(c => (c.a.key === 'probe' ? c.b : c.a));
   if (!hits.length) return undefined;
   return `Achtung: überschneidet sich mit „${hits[0].title}“ (${utcToZoned(hits[0].startAt, user.timezone).time} Uhr)${hits.length > 1 ? ` und ${hits.length - 1} weiteren` : ''}.`;
 }
 
-function done(message: string): ActionResult {
+async function done(message: string): Promise<ActionResult> {
   revalidatePath('/', 'layout');
   return { ok: true, message };
 }
@@ -71,16 +71,16 @@ function done(message: string): ActionResult {
 export async function createEventAction(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const e = readEventForm(user, form);
-    const cal = getCalendar(user.id, e.calendarId!)!;
+    const e = await readEventForm(user, form);
+    const cal = (await getCalendar(user.id, e.calendarId!))!;
     // Events created in an imported Google/Outlook calendar are written there on the next sync.
     const external = cal.kind === 'google' || cal.kind === 'outlook';
     if (external && e.recurrenceFreq) throw new InputError('Wiederkehrende Termine bitte im CLOQI-Kalender anlegen – sie werden dann exportiert.');
-    createEvent(user.id, external
+    await createEvent(user.id, external
       ? { ...e, source: cal.kind as 'google' | 'outlook', connectionId: cal.connectionId, syncState: 'dirty' }
       : { ...e, source: 'manual' });
     const base = external ? `Gespeichert – wird an ${cal.name} übertragen.` : 'Termin gespeichert.';
-    return done(e.allDay ? base : conflictWarning(user, e.startAt, e.endAt) ?? base);
+    return done(e.allDay ? base : await conflictWarning(user, e.startAt, e.endAt) ?? base);
   } catch (e) { return fail(e); }
 }
 
@@ -91,49 +91,49 @@ export async function createEventAction(_prev: ActionResult | null, form: FormDa
 export async function updateEventAction(id: string, scope: 'single' | 'series', occurrenceDate: string | null, _prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const existing = getEvent(user.id, id);
+    const existing = await getEvent(user.id, id);
     if (!existing) throw new InputError('Termin nicht gefunden.');
     if (IMPORT_ONLY.includes(existing.source)) throw new InputError('Dieser Termin stammt aus WebUntis bzw. einer importierten Datei und bleibt dort maßgeblich.');
-    const e = readEventForm(user, form);
+    const e = await readEventForm(user, form);
     const external = EXTERNAL.includes(existing.source);
     if (external) {
       // keep it in its external calendar; mark for upload on the next sync
-      updateEvent(user.id, id, { ...e, calendarId: existing.calendarId, recurrenceFreq: null, syncState: 'dirty' });
+      await updateEvent(user.id, id, { ...e, calendarId: existing.calendarId, recurrenceFreq: null, syncState: 'dirty' });
       return done('Gespeichert. Die Änderung wird an den verbundenen Kalender übertragen.');
     }
     if (existing.recurrenceFreq && scope === 'single' && occurrenceDate) {
-      updateEvent(user.id, id, { exdates: [...new Set([...existing.exdates, occurrenceDate])] });
-      createEvent(user.id, { ...e, recurrenceFreq: null, seriesId: existing.id, source: existing.source });
+      await updateEvent(user.id, id, { exdates: [...new Set([...existing.exdates, occurrenceDate])] });
+      await createEvent(user.id, { ...e, recurrenceFreq: null, seriesId: existing.id, source: existing.source });
     } else if (existing.recurrenceFreq && scope === 'series') {
       const first = utcToZoned(existing.startAt, user.timezone).date;
       const newStart = utcToZoned(e.startAt, user.timezone).time;
       const duration = Date.parse(e.endAt) - Date.parse(e.startAt);
       const startAt = zonedToUtc(first, newStart, user.timezone).toISOString();
-      updateEvent(user.id, id, { ...e, startAt, endAt: new Date(Date.parse(startAt) + duration).toISOString() });
+      await updateEvent(user.id, id, { ...e, startAt, endAt: new Date(Date.parse(startAt) + duration).toISOString() });
     } else {
-      updateEvent(user.id, id, e);
+      await updateEvent(user.id, id, e);
     }
-    return done(e.allDay ? 'Gespeichert.' : conflictWarning(user, e.startAt, e.endAt, id) ?? 'Gespeichert.');
+    return done(e.allDay ? 'Gespeichert.' : await conflictWarning(user, e.startAt, e.endAt, id) ?? 'Gespeichert.');
   } catch (e) { return fail(e); }
 }
 
 export async function deleteEventAction(id: string, scope: 'single' | 'series' = 'series', occurrenceDate: string | null = null): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const existing = getEvent(user.id, id);
+    const existing = await getEvent(user.id, id);
     if (!existing) throw new InputError('Termin nicht gefunden.');
     if (IMPORT_ONLY.includes(existing.source)) throw new InputError('Dieser Termin wird in seiner Quelle (WebUntis bzw. Datei) verwaltet.');
     if (EXTERNAL.includes(existing.source) && existing.externalUid) {
-      const cal = existing.calendarId ? getCalendar(user.id, existing.calendarId) : null;
+      const cal = existing.calendarId ? await getCalendar(user.id, existing.calendarId) : null;
       if (!cal?.writable) throw new InputError('Für diesen Kalender fehlt die Schreibberechtigung.');
       const { calendarId, id: remoteId } = splitExternalUid(existing.externalUid);
       await deleteRemote(user, existing.source as OAuthProvider, calendarId, remoteId);
     }
     if (existing.recurrenceFreq && scope === 'single' && occurrenceDate) {
-      updateEvent(user.id, id, { exdates: [...new Set([...existing.exdates, occurrenceDate])] });
+      await updateEvent(user.id, id, { exdates: [...new Set([...existing.exdates, occurrenceDate])] });
       return done('Dieser Termin wurde aus der Serie entfernt.');
     }
-    deleteEvent(user.id, id);
+    await deleteEvent(user.id, id);
     return done(existing.recurrenceFreq ? 'Die ganze Serie wurde gelöscht.' : 'Termin gelöscht.');
   } catch (e) { return fail(e); }
 }
@@ -141,11 +141,11 @@ export async function deleteEventAction(id: string, scope: 'single' | 'series' =
 export async function duplicateEventAction(id: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const e = getEvent(user.id, id);
+    const e = await getEvent(user.id, id);
     if (!e) throw new InputError('Termin nicht gefunden.');
-    const main = mainCalendarId(user.id);
-    const target = e.calendarId && getCalendar(user.id, e.calendarId)?.kind === 'custom' ? e.calendarId : main;
-    createEvent(user.id, {
+    const main = await mainCalendarId(user.id);
+    const target = e.calendarId && (await getCalendar(user.id, e.calendarId))?.kind === 'custom' ? e.calendarId : main;
+    await createEvent(user.id, {
       title: `${e.title} (Kopie)`, description: e.description, startAt: e.startAt, endAt: e.endAt, allDay: e.allDay, category: e.category,
       location: e.location, reminderMinutes: e.reminderMinutes, calendarId: target, source: 'manual',
       recurrenceFreq: e.source === 'manual' || e.source === 'assistant' ? e.recurrenceFreq : null, recurrenceInterval: e.recurrenceInterval,
@@ -162,38 +162,38 @@ export async function moveItemAction(kind: 'event' | 'study', id: string, occurr
     if (!isValidDate(day) || !isValidTime(start)) throw new InputError('Datum oder Uhrzeit ungültig.');
     const s = zonedToUtc(day, start, user.timezone);
     if (kind === 'study') {
-      const b = getBlock(user.id, id);
+      const b = await getBlock(user.id, id);
       if (!b) throw new InputError('Lernblock nicht gefunden.');
       const endAt = new Date(s.getTime() + Date.parse(b.endAt) - Date.parse(b.startAt)).toISOString();
-      const warn = conflictWarning(user, s.toISOString(), endAt, id);
+      const warn = await conflictWarning(user, s.toISOString(), endAt, id);
       if (warn) throw new InputError(warn.replace('Achtung: überschneidet', 'Geht nicht – überschneidet'));
-      updateBlock(user.id, id, { startAt: s.toISOString(), endAt, status: 'planned' });
+      await updateBlock(user.id, id, { startAt: s.toISOString(), endAt, status: 'planned' });
       return done('Lernblock verschoben.');
     }
-    const e = getEvent(user.id, id);
+    const e = await getEvent(user.id, id);
     if (!e) throw new InputError('Termin nicht gefunden.');
     if (IMPORT_ONLY.includes(e.source)) throw new InputError('Termine aus WebUntis können nicht verschoben werden.');
     const duration = Date.parse(e.endAt) - Date.parse(e.startAt);
     const startAt = s.toISOString();
     const endAt = new Date(s.getTime() + duration).toISOString();
     if (e.recurrenceFreq && occurrenceDate) {
-      updateEvent(user.id, id, { exdates: [...new Set([...e.exdates, occurrenceDate])] });
-      createEvent(user.id, {
+      await updateEvent(user.id, id, { exdates: [...new Set([...e.exdates, occurrenceDate])] });
+      await createEvent(user.id, {
         title: e.title, description: e.description, startAt, endAt, allDay: e.allDay, category: e.category, location: e.location,
         reminderMinutes: e.reminderMinutes, calendarId: e.calendarId, seriesId: e.id, source: e.source,
       });
     } else {
-      updateEvent(user.id, id, { startAt, endAt, ...(EXTERNAL.includes(e.source) ? { syncState: 'dirty' as const } : {}) });
+      await updateEvent(user.id, id, { startAt, endAt, ...(EXTERNAL.includes(e.source) ? { syncState: 'dirty' as const } : {}) });
     }
-    return done(conflictWarning(user, startAt, endAt, id) ?? 'Termin verschoben.');
+    return done(await conflictWarning(user, startAt, endAt, id) ?? 'Termin verschoben.');
   } catch (e) { return fail(e); }
 }
 
 export async function setBlockDone(id: string, isDone: boolean): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    if (!getBlock(user.id, id)) throw new InputError('Lernblock nicht gefunden.');
-    updateBlock(user.id, id, isDone ? { status: 'done', completedAt: new Date().toISOString() } : { status: 'planned', completedAt: null });
+    if (!await getBlock(user.id, id)) throw new InputError('Lernblock nicht gefunden.');
+    await updateBlock(user.id, id, isDone ? { status: 'done', completedAt: new Date().toISOString() } : { status: 'planned', completedAt: null });
     return done(isDone ? 'Stark! Lernblock erledigt.' : 'Wieder offen.');
   } catch (e) { return fail(e); }
 }
@@ -201,7 +201,7 @@ export async function setBlockDone(id: string, isDone: boolean): Promise<ActionR
 export async function deleteBlockAction(id: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    deleteBlocks(user.id, [id]);
+    await deleteBlocks(user.id, [id]);
     return done('Lernblock entfernt.');
   } catch (e) { return fail(e); }
 }
@@ -215,7 +215,7 @@ export interface EventDetails {
 /** Event fields for the edit form (in the user's time zone). */
 export async function getEventDetails(id: string, occurrenceDate: string | null): Promise<EventDetails | null> {
   const user = await requireUser();
-  const e = getEvent(user.id, id);
+  const e = await getEvent(user.id, id);
   if (!e) return null;
   const s = utcToZoned(e.startAt, user.timezone);
   const en = utcToZoned(e.endAt, user.timezone);
@@ -244,13 +244,13 @@ export async function addRoutineAction(_prev: ActionResult | null, form: FormDat
     const until = String(form.get('until') ?? '');
     if (until && !isValidDate(until)) throw new InputError('Ungültiges Enddatum.');
     const today = utcToZoned(new Date(), user.timezone);
-    const calendarId = mainCalendarId(user.id);
+    const calendarId = await mainCalendarId(user.id);
     for (const wd of weekdays) {
       const diff = (wd - today.weekday + 7) % 7;
       const d = new Date(`${today.date}T00:00:00Z`);
       d.setUTCDate(d.getUTCDate() + diff);
       const day = d.toISOString().slice(0, 10);
-      createEvent(user.id, {
+      await createEvent(user.id, {
         title, category: cat, calendarId, source: 'manual', location: optionalText(form, 'location', 200),
         startAt: zonedToUtc(day, startTime, user.timezone).toISOString(), endAt: zonedToUtc(day, endTime, user.timezone).toISOString(),
         recurrenceFreq: 'weekly', recurrenceInterval: 1, recurrenceUntil: until || null, reminderMinutes: user.prefs.reminderDefault,
@@ -265,8 +265,8 @@ export async function addRoutineAction(_prev: ActionResult | null, form: FormDat
 export async function toggleCalendarVisibility(id: string, visible: boolean): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    if (!getCalendar(user.id, id)) throw new InputError('Kalender nicht gefunden.');
-    updateCalendar(user.id, id, { visible });
+    if (!await getCalendar(user.id, id)) throw new InputError('Kalender nicht gefunden.');
+    await updateCalendar(user.id, id, { visible });
     return done(visible ? 'Eingeblendet.' : 'Ausgeblendet.');
   } catch (e) { return fail(e); }
 }
@@ -279,11 +279,11 @@ export async function saveCalendarAction(_prev: ActionResult | null, form: FormD
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) throw new InputError('Ungültige Farbe.');
     const id = String(form.get('id') ?? '');
     if (id) {
-      if (!getCalendar(user.id, id)) throw new InputError('Kalender nicht gefunden.');
-      updateCalendar(user.id, id, { name, color });
+      if (!await getCalendar(user.id, id)) throw new InputError('Kalender nicht gefunden.');
+      await updateCalendar(user.id, id, { name, color });
       return done('Kalender gespeichert.');
     }
-    createCalendar(user.id, { name, color, kind: 'custom' });
+    await createCalendar(user.id, { name, color, kind: 'custom' });
     return done(`Kalender „${name}“ erstellt.`);
   } catch (e) { return fail(e); }
 }
@@ -291,10 +291,10 @@ export async function saveCalendarAction(_prev: ActionResult | null, form: FormD
 export async function deleteCalendarAction(id: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const cal = getCalendar(user.id, id);
+    const cal = await getCalendar(user.id, id);
     if (!cal) throw new InputError('Kalender nicht gefunden.');
     if (cal.kind !== 'custom') throw new InputError('Eingebaute und verbundene Kalender trennst du unter „Kalender verbinden“.');
-    deleteCalendar(user.id, id);
+    await deleteCalendar(user.id, id);
     return done('Kalender und seine Termine wurden gelöscht.');
   } catch (e) { return fail(e); }
 }
@@ -307,7 +307,7 @@ export interface ReminderItem { key: string; title: string; startAt: string; rem
 export async function upcomingReminders(): Promise<ReminderItem[]> {
   const user = await requireUser();
   const now = Date.now();
-  const items = getCalendarItems(user, new Date(now - 3600000).toISOString(), new Date(now + 26 * 3600000).toISOString());
+  const items = await getCalendarItems(user, new Date(now - 3600000).toISOString(), new Date(now + 26 * 3600000).toISOString());
   return items
     .filter(i => (i.status === 'active' || i.status === 'planned') && !i.allDay)
     .map(i => {

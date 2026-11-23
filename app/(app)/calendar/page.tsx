@@ -41,11 +41,11 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   }
   const from = zonedToUtc(fromDay, '00:00', tz).toISOString();
   const to = zonedToUtc(toDay, '00:00', tz).toISOString();
-  const items = getCalendarItems(user, from, to).filter(i => i.status !== 'missed' || view !== 'agenda');
+  const items = (await getCalendarItems(user, from, to)).filter(i => i.status !== 'missed' || view !== 'agenda');
 
   // Cycle overlay: shown only inside CLOQI, never exported or synced.
-  if (user.prefs.cycleEnabled && user.prefs.cycleInCalendar && hasCycleConsent(user.id)) {
-    const s = summarize(listCycleEntries(user.id), today);
+  if (user.prefs.cycleEnabled && user.prefs.cycleInCalendar && await hasCycleConsent(user.id)) {
+    const s = summarize(await listCycleEntries(user.id), today);
     if (s.nextStart) {
       for (let i = 0; i < s.periodLength; i++) {
         const d = addDays(s.nextStart, i);
@@ -59,7 +59,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   return (
     <CalendarApp
       view={view} date={date} today={today} tz={tz} filter={filter} rangeFrom={fromDay} rangeTo={addDays(toDay, -1)}
-      items={items} calendars={listCalendars(user.id)} mascot={user.prefs.mascot} reminderDefault={user.prefs.reminderDefault}
+      items={items} calendars={await listCalendars(user.id)} mascot={user.prefs.mascot} reminderDefault={user.prefs.reminderDefault}
     />
   );
 }

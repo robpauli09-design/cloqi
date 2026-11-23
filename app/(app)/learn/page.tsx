@@ -10,8 +10,8 @@ export const metadata: Metadata = { title: 'Learn' };
 
 export default async function LearnPage() {
   const user = await requireReadyUser();
-  const tasks = listTasks(user.id);
-  const blocks = listBlocks(user.id);
+  const tasks = await listTasks(user.id);
+  const blocks = await listBlocks(user.id);
   return (
     <div className="space-y-6">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-end">

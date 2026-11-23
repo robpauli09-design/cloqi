@@ -19,7 +19,7 @@ export async function addTaskAction(_prev: PlanResult | null, form: FormData): P
     const kind = String(form.get('kind')) as TaskKind;
     if (!KINDS.includes(kind)) throw new InputError('Bitte wähle eine Art.');
     const minutesRaw = String(form.get('minutes') ?? '');
-    const taskId = createTaskFor(user, {
+    const taskId = await createTaskFor(user, {
       subject: text(form, 'subject', { required: true, max: 60, label: 'Fach' }),
       kind,
       day: date(form, 'date'),
@@ -29,24 +29,24 @@ export async function addTaskAction(_prev: PlanResult | null, form: FormData): P
       title: text(form, 'title', { max: 120 }) || undefined,
     });
     revalidatePath('/', 'layout');
-    return { ok: true, taskId, proposal: proposePlan(user, { kind: 'task', taskId }) };
+    return { ok: true, taskId, proposal: await proposePlan(user, { kind: 'task', taskId }) };
   } catch (e) { return fail(e); }
 }
 
 export async function previewTaskPlan(taskId: string): Promise<PlanResult> {
   try {
     const user = await requireUser();
-    if (!getTask(user.id, taskId)) throw new InputError('Aufgabe nicht gefunden.');
-    return { ok: true, taskId, proposal: proposePlan(user, { kind: 'task', taskId }) };
+    if (!await getTask(user.id, taskId)) throw new InputError('Aufgabe nicht gefunden.');
+    return { ok: true, taskId, proposal: await proposePlan(user, { kind: 'task', taskId }) };
   } catch (e) { return fail(e); }
 }
 
 export async function applyTaskPlan(taskId: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    if (!getTask(user.id, taskId)) throw new InputError('Aufgabe nicht gefunden.');
-    const p = proposePlan(user, { kind: 'task', taskId });
-    applyPlan(user, p);
+    if (!await getTask(user.id, taskId)) throw new InputError('Aufgabe nicht gefunden.');
+    const p = await proposePlan(user, { kind: 'task', taskId });
+    await applyPlan(user, p);
     revalidatePath('/', 'layout');
     return { ok: true, message: p.blocks.length ? `${p.blocks.length} Lernblöcke eingeplant.` : 'Es war kein freier Zeitraum verfügbar.' };
   } catch (e) { return fail(e); }
@@ -55,15 +55,15 @@ export async function applyTaskPlan(taskId: string): Promise<ActionResult> {
 export async function previewReplanAll(): Promise<PlanResult> {
   try {
     const user = await requireUser();
-    return { ok: true, proposal: proposePlan(user, { kind: 'all' }) };
+    return { ok: true, proposal: await proposePlan(user, { kind: 'all' }) };
   } catch (e) { return fail(e); }
 }
 
 export async function applyReplanAll(): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const p = proposePlan(user, { kind: 'all' });
-    applyPlan(user, p);
+    const p = await proposePlan(user, { kind: 'all' });
+    await applyPlan(user, p);
     revalidatePath('/', 'layout');
     return { ok: true, message: 'Lernplan aktualisiert.' };
   } catch (e) { return fail(e); }
@@ -72,7 +72,7 @@ export async function applyReplanAll(): Promise<ActionResult> {
 export async function setTaskDone(id: string, done: boolean): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    setTaskStatus(user.id, id, done ? 'done' : 'open');
+    await setTaskStatus(user.id, id, done ? 'done' : 'open');
     revalidatePath('/', 'layout');
     return { ok: true, message: done ? 'Erledigt – stark!' : 'Wieder offen.' };
   } catch (e) { return fail(e); }
@@ -81,7 +81,7 @@ export async function setTaskDone(id: string, done: boolean): Promise<ActionResu
 export async function deleteTaskAction(id: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    deleteTask(user.id, id);
+    await deleteTask(user.id, id);
     revalidatePath('/', 'layout');
     return { ok: true, message: 'Gelöscht, inklusive Lernblöcken.' };
   } catch (e) { return fail(e); }

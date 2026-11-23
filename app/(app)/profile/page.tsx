@@ -16,7 +16,7 @@ const PROVIDERS = [
 
 export default async function ProfilePage() {
   const user = await requireReadyUser();
-  const conns = listConnections(user.id);
+  const conns = await listConnections(user.id);
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-4">

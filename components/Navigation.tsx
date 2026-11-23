@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, CalendarDays, Flower2, Home, Link2, LogOut, MessageCircleHeart, Sun, UserRound } from 'lucide-react';
+import { BookOpen, BookOpenText, CalendarDays, Flower2, Home, Link2, LogOut, MessageCircleHeart, Sun, UserRound } from 'lucide-react';
 import { logout } from '@/app/actions/auth';
 import { Logo } from './Logo';
 import { Mascot, type MascotName } from './Mascot';
@@ -13,12 +13,13 @@ const NAV = [
   { href: '/learn', label: 'Learn', icon: BookOpen },
   { href: '/life', label: 'Life', icon: Sun },
   { href: '/ai', label: 'CLOQI AI', icon: MessageCircleHeart },
+  { href: '/vault', label: 'Wissen', icon: BookOpenText },
   { href: '/profile', label: 'Profil', icon: UserRound },
 ];
 const CYCLE = { href: '/cycle', label: 'Cycle', icon: Flower2 };
 
 function useItems(cycle: boolean) {
-  return cycle ? [...NAV.slice(0, 5), CYCLE, NAV[5]] : NAV;
+  return cycle ? [...NAV.slice(0, 6), CYCLE, NAV[6]] : NAV;
 }
 
 export function Sidebar({ name, email, mascot, cycle }: { name: string; email: string; mascot: MascotName; cycle: boolean }) {
@@ -66,7 +67,7 @@ export function Sidebar({ name, email, mascot, cycle }: { name: string; email: s
 
 export function MobileNav({ cycle: _cycle }: { cycle: boolean }) {
   const path = usePathname();
-  const items = NAV; // six main areas; CYCLE is reachable from Home and Profil on phones
+  const items = NAV.filter(i => i.href !== '/vault'); // six main areas; Wissen and Cycle are linked from CLOQI AI, Home and Profil
   return (
     <nav aria-label="Navigation" className="safe-bottom fixed inset-x-0 bottom-0 z-40 border-t border-line bg-white/95 px-2 pt-1.5 backdrop-blur lg:hidden">
       <div className="mx-auto flex max-w-lg justify-between">

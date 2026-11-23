@@ -22,26 +22,26 @@ export interface Dashboard {
 
 const hm = (iso: string, tz: string) => utcToZoned(iso, tz).time;
 
-export function buildDashboard(user: User, now = new Date()): Dashboard {
+export async function buildDashboard(user: User, now = new Date()): Promise<Dashboard> {
   const tz = user.timezone;
   const today = todayIn(tz, now);
   const { from, to } = dayRange(today, tz);
   const nowIso = now.toISOString();
-  const items = getCalendarItems(user, from, to).filter(i => i.status !== 'missed');
-  const week = getCalendarItems(user, nowIso, dayRange(addDays(today, 7), tz).from, { includeHidden: true });
+  const items = (await getCalendarItems(user, from, to)).filter(i => i.status !== 'missed');
+  const week = await getCalendarItems(user, nowIso, dayRange(addDays(today, 7), tz).from, { includeHidden: true });
   const upcoming = (i: CalendarItem) => i.endAt > nowIso && (i.status === 'active' || i.status === 'planned');
-  const allTasks = listTasks(user.id, { openOnly: true }).filter(t => t.dueAt > nowIso);
+  const allTasks = (await listTasks(user.id, { openOnly: true })).filter(t => t.dueAt > nowIso);
 
-  const busy = busyIntervals(getCalendarItems(user, from, to, { includeHidden: true }));
+  const busy = busyIntervals(await getCalendarItems(user, from, to, { includeHidden: true }));
   const freeToday = freeSlots(today, tz, busy, { ...user.prefs, studyStart: '14:00', studyEnd: '21:00', weekendStart: '10:00', weekendEnd: '20:00' }, now)
     .filter(s => s.end - s.start >= 60 * 60000)
     .map(s => ({ start: hm(new Date(s.start).toISOString(), tz), end: hm(new Date(s.end).toISOString(), tz) }));
 
-  const suggestions = listOpenSuggestions(user.id);
+  const suggestions = await listOpenSuggestions(user.id);
   const conflicts = findConflicts(week);
 
   // A short, honest personal note from the mascot – derived only from real data.
-  const tomorrow = getCalendarItems(user, ...Object.values(dayRange(addDays(today, 1), tz)) as [string, string]);
+  const tomorrow = await getCalendarItems(user, ...Object.values(dayRange(addDays(today, 1), tz)) as [string, string]);
   const lessonsTomorrow = tomorrow.filter(i => i.kind === 'lesson' && i.status === 'active');
   const nextTask = allTasks[0];
   const daysToTask = nextTask ? daysBetween(today, utcToZoned(nextTask.dueAt, tz).date) : null;

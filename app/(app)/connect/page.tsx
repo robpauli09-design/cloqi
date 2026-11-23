@@ -11,10 +11,11 @@ export const metadata: Metadata = { title: 'Kalender verbinden' };
 export default async function ConnectPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
   const user = await requireReadyUser();
   const { ok, error } = await searchParams;
-  const conn = (p: 'google' | 'outlook' | 'webuntis' | 'apple') => {
-    const c = getConnection(user.id, p);
-    return c ? { status: c.status, lastSyncAt: c.lastSyncAt, lastError: c.lastError, config: c.config } : null;
-  };
+  const conns = Object.fromEntries(await Promise.all((['google', 'outlook', 'webuntis', 'apple'] as const).map(async p => {
+    const c = await getConnection(user.id, p);
+    return [p, c ? { status: c.status, lastSyncAt: c.lastSyncAt, lastError: c.lastError, config: c.config } : null] as const;
+  })));
+  const conn = (p: 'google' | 'outlook' | 'webuntis' | 'apple') => conns[p];
   return (
     <div className="space-y-6">
       <header className="flex items-end gap-4">
@@ -34,13 +35,13 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
       <div className="grid gap-6 xl:grid-cols-2">
         <ProviderCard provider="google" configured={isConfigured('google')} conn={conn('google')} tz={user.timezone} />
         <ProviderCard provider="outlook" configured={isConfigured('outlook')} conn={conn('outlook')} tz={user.timezone} />
-        <AppleCard conn={conn('apple')} urls={feedUrls(user)} tz={user.timezone} />
+        <AppleCard conn={conn('apple')} urls={await feedUrls(user)} tz={user.timezone} />
         <WebUntisCard conn={conn('webuntis')} tz={user.timezone} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">
         <ImportCard />
-        <ManualTimetable entries={listTimetable(user.id)} breaks={listBreaks(user.id)} />
+        <ManualTimetable entries={await listTimetable(user.id)} breaks={await listBreaks(user.id)} />
       </div>
     </div>
   );

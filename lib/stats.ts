@@ -16,12 +16,12 @@ export interface Progress {
   weekDays: { date: string; minutes: number }[];
 }
 
-export function getProgress(user: User, now = new Date()): Progress {
+export async function getProgress(user: User, now = new Date()): Promise<Progress> {
   const tz = user.timezone;
   const today = todayIn(tz, now);
   const weekStart = startOfWeek(today);
-  const blocks = listBlocks(user.id);
-  const tasks = listTasks(user.id);
+  const blocks = await listBlocks(user.id);
+  const tasks = await listTasks(user.id);
   const minutes = (b: { startAt: string; endAt: string }) => Math.round((Date.parse(b.endAt) - Date.parse(b.startAt)) / 60000);
 
   const doneByDay = new Map<string, number>();

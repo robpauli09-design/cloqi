@@ -21,7 +21,7 @@ import { CATEGORIES, USER_TYPE_LABELS, type Category, type Prefs, type Subject, 
 import { fail, InputError, int, text, time, type ActionResult } from '@/lib/validate';
 import { normalizeWebUntisUrl, syncWebUntis, upsertFeedEvents, fetchCalendar, isWebUntisHost } from '@/lib/webuntis';
 
-function done(message: string): ActionResult {
+async function done(message: string): Promise<ActionResult> {
   revalidatePath('/', 'layout');
   return { ok: true, message };
 }
@@ -34,7 +34,7 @@ export async function completeOnboarding(form: FormData) {
   const type = String(form.get('userType') ?? '') as UserType;
   const areas = form.getAll('areas').map(String).filter(a => ['schule', 'arbeit', 'training', 'privat'].includes(a));
   const mascot = form.get('mascot') === 'clea' ? 'clea' : 'cloki';
-  updateUser(user.id, {
+  await updateUser(user.id, {
     name, userType: type in USER_TYPE_LABELS ? type : 'sonstiges', lifeAreas: areas, onboarded: true,
     prefs: { ...user.prefs, mascot },
   });
@@ -50,7 +50,7 @@ export async function saveProfile(_prev: ActionResult | null, form: FormData): P
     const type = String(form.get('userType') ?? '') as UserType;
     const tz = String(form.get('timezone') ?? user.timezone);
     try { new Intl.DateTimeFormat('en', { timeZone: tz }); } catch { throw new InputError('Unbekannte Zeitzone.'); }
-    updateUser(user.id, {
+    await updateUser(user.id, {
       name: text(form, 'name', { required: true, max: 40, label: 'Name' }),
       userType: type in USER_TYPE_LABELS ? type : user.userType,
       timezone: tz,
@@ -73,7 +73,7 @@ export async function savePrefs(_prev: ActionResult | null, form: FormData): Pro
       reminderDefault: int(form, 'reminderDefault', 0, 1440),
     };
     if (prefs.studyEnd <= prefs.studyStart || prefs.weekendEnd <= prefs.weekendStart) throw new InputError('Das Ende der Lernzeit muss nach dem Beginn liegen.');
-    updateUser(user.id, { prefs });
+    await updateUser(user.id, { prefs });
     return done('Lernpräferenzen gespeichert.');
   } catch (e) { return fail(e); }
 }
@@ -84,14 +84,14 @@ export async function addSubject(_prev: ActionResult | null, form: FormData): Pr
     const name = text(form, 'subject', { required: true, max: 40, label: 'Fach' });
     const difficulty = int(form, 'difficulty', 1, 3, 2) as Subject['difficulty'];
     const subjects = user.prefs.subjects.filter(s => s.name.toLowerCase() !== name.toLowerCase());
-    updateUser(user.id, { prefs: { ...user.prefs, subjects: [...subjects, { name, difficulty }].slice(0, 40) } });
+    await updateUser(user.id, { prefs: { ...user.prefs, subjects: [...subjects, { name, difficulty }].slice(0, 40) } });
     return done(`${name} gespeichert.`);
   } catch (e) { return fail(e); }
 }
 
 export async function removeSubject(name: string): Promise<ActionResult> {
   const user = await requireUser();
-  updateUser(user.id, { prefs: { ...user.prefs, subjects: user.prefs.subjects.filter(s => s.name !== name) } });
+  await updateUser(user.id, { prefs: { ...user.prefs, subjects: user.prefs.subjects.filter(s => s.name !== name) } });
   return done('Fach entfernt.');
 }
 
@@ -99,7 +99,7 @@ export async function deleteAccount(_prev: ActionResult | null, form: FormData):
   const user = await requireUser();
   if (String(form.get('confirm') ?? '').trim().toUpperCase() !== 'LÖSCHEN') return { ok: false, error: 'Bitte tippe LÖSCHEN zur Bestätigung.' };
   for (const p of ['google', 'outlook'] as OAuthProvider[]) await revokeAccess(user, p).catch(() => undefined);
-  deleteUser(user.id);
+  await deleteUser(user.id);
   await destroySession();
   redirect('/login?deleted=1');
 }
@@ -112,7 +112,7 @@ export async function connectWebUntis(_prev: ActionResult | null, form: FormData
     const url = normalizeWebUntisUrl(text(form, 'url', { required: true, max: 2000, label: 'Kalender-Link' }));
     // test the link before storing it
     parseIcs(await fetchCalendar(url, isWebUntisHost), user.timezone);
-    upsertConnection(user.id, 'webuntis', { status: 'connected', secretEnc: encrypt(url.toString()) });
+    await upsertConnection(user.id, 'webuntis', { status: 'connected', secretEnc: encrypt(url.toString()) });
     const stats = await syncWebUntis(user);
     return done(`WebUntis verbunden: ${stats.imported} Stunden übernommen${stats.cancelled ? `, ${stats.cancelled} davon entfallen` : ''}.`);
   } catch (e) { return fail(e); }
@@ -135,7 +135,7 @@ export async function disconnect(provider: 'webuntis' | 'apple' | OAuthProvider)
   try {
     const user = await requireUser();
     if (provider === 'google' || provider === 'outlook') await revokeAccess(user, provider);
-    deleteConnection(user.id, provider);
+    await deleteConnection(user.id, provider);
     return done('Verbindung getrennt. Importierte Termine wurden aus CLOQI entfernt.');
   } catch (e) { return fail(e); }
 }
@@ -143,13 +143,13 @@ export async function disconnect(provider: 'webuntis' | 'apple' | OAuthProvider)
 export async function saveProviderSettings(provider: OAuthProvider, _prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const conn = getConnection(user.id, provider);
+    const conn = await getConnection(user.id, provider);
     if (!conn) throw new InputError('Nicht verbunden.');
     const available = conn.config.availableCalendars ?? [];
     const imports = form.getAll('import').map(String).filter(id => available.some(c => c.id === id));
     const exportId = String(form.get('exportCalendarId') ?? '');
     const exportCats = form.getAll('exportCategories').map(String).filter((c): c is Category => CATEGORIES.includes(c as Category));
-    upsertConnection(user.id, provider, {
+    await upsertConnection(user.id, provider, {
       config: {
         importCalendarIds: imports,
         exportCalendarId: available.some(c => c.id === exportId && c.writable) ? exportId : undefined,
@@ -163,7 +163,7 @@ export async function saveProviderSettings(provider: OAuthProvider, _prev: Actio
 export async function refreshProviderCalendars(provider: OAuthProvider): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    upsertConnection(user.id, provider, { config: { availableCalendars: await listRemoteCalendars(user, provider) } });
+    await upsertConnection(user.id, provider, { config: { availableCalendars: await listRemoteCalendars(user, provider) } });
     return done('Kalenderliste aktualisiert.');
   } catch (e) { return fail(e); }
 }
@@ -171,7 +171,7 @@ export async function refreshProviderCalendars(provider: OAuthProvider): Promise
 export async function enableAppleFeed(): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    createOrRotateFeed(user);
+    await createOrRotateFeed(user);
     return done('Dein persönlicher Kalender-Link ist bereit. Ein alter Link funktioniert ab jetzt nicht mehr.');
   } catch (e) { return fail(e); }
 }
@@ -180,7 +180,7 @@ export async function saveFeedCategories(_prev: ActionResult | null, form: FormD
   try {
     const user = await requireUser();
     const cats = form.getAll('exportCategories').map(String).filter((c): c is Category => CATEGORIES.includes(c as Category));
-    upsertConnection(user.id, 'apple', { config: { exportCategories: cats } });
+    await upsertConnection(user.id, 'apple', { config: { exportCategories: cats } });
     return done('Gespeichert.');
   } catch (e) { return fail(e); }
 }
@@ -193,7 +193,7 @@ export async function addLesson(_prev: ActionResult | null, form: FormData): Pro
     const startTime = time(form, 'start', 'Beginn');
     const endTime = time(form, 'end', 'Ende');
     if (endTime <= startTime) throw new InputError('Das Ende muss nach dem Beginn liegen.');
-    addTimetableEntry(user.id, {
+    await addTimetableEntry(user.id, {
       source: 'manual', subject: text(form, 'subject', { required: true, max: 60, label: 'Fach' }),
       weekday: int(form, 'weekday', 1, 7), startTime, endTime,
       room: text(form, 'room', { max: 40 }) || null, teacher: text(form, 'teacher', { max: 60 }) || null,
@@ -205,7 +205,7 @@ export async function addLesson(_prev: ActionResult | null, form: FormData): Pro
 
 export async function removeLesson(id: string): Promise<ActionResult> {
   const user = await requireUser();
-  deleteTimetableEntry(user.id, id);
+  await deleteTimetableEntry(user.id, id);
   return done('Unterrichtseinheit gelöscht.');
 }
 
@@ -213,9 +213,9 @@ export async function removeLesson(id: string): Promise<ActionResult> {
 export async function cancelLessonOnce(id: string, date: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const entry = getTimetableEntry(user.id, id);
+    const entry = await getTimetableEntry(user.id, id);
     if (!entry || !isValidDate(date)) throw new InputError('Unterrichtseinheit nicht gefunden.');
-    setTimetableExdates(user.id, id, [...new Set([...entry.exdates, date])]);
+    await setTimetableExdates(user.id, id, [...new Set([...entry.exdates, date])]);
     return done(`${entry.subject} entfällt an diesem Tag.`);
   } catch (e) { return fail(e); }
 }
@@ -230,12 +230,12 @@ export async function importTimetableFile(_prev: ActionResult | null, form: Form
     if (/\.ics$/i.test(file.name) || content.includes('BEGIN:VCALENDAR')) {
       const events = parseIcs(content, user.timezone, new Date(Date.now() + 365 * 86400000));
       const category = (CATEGORIES.includes(String(form.get('category')) as Category) ? String(form.get('category')) : 'schule') as Category;
-      const s = upsertFeedEvents(user, 'ics', null, events, category);
+      const s = await upsertFeedEvents(user, 'ics', null, events, category);
       return done(`${s.imported} Termine importiert${s.updated ? `, ${s.updated} aktualisiert` : ''}.`);
     }
     const { lessons, errors } = parseTimetableCsv(content);
     if (!lessons.length) throw new InputError(errors[0] ?? 'Keine Unterrichtseinheiten gefunden.');
-    for (const l of lessons) addTimetableEntry(user.id, { ...l, source: 'csv', institution: null });
+    for (const l of lessons) await addTimetableEntry(user.id, { ...l, source: 'csv', institution: null });
     return done(`${lessons.length} Unterrichtseinheiten importiert${errors.length ? ` (${errors.length} Zeilen übersprungen)` : ''}.`);
   } catch (e) { return fail(e); }
 }
@@ -245,14 +245,14 @@ export async function addHoliday(_prev: ActionResult | null, form: FormData): Pr
     const user = await requireUser();
     const from = String(form.get('from') ?? ''), to = String(form.get('to') ?? '');
     if (!isValidDate(from) || !isValidDate(to) || to < from) throw new InputError('Bitte gib einen gültigen Zeitraum an.');
-    addBreak(user.id, text(form, 'name', { max: 40 }) || 'Ferien', from, to);
+    await addBreak(user.id, text(form, 'name', { max: 40 }) || 'Ferien', from, to);
     return done('Gespeichert – in diesem Zeitraum wird kein Unterricht angezeigt.');
   } catch (e) { return fail(e); }
 }
 
 export async function removeHoliday(id: string): Promise<ActionResult> {
   const user = await requireUser();
-  deleteBreak(user.id, id);
+  await deleteBreak(user.id, id);
   return done('Entfernt.');
 }
 
@@ -261,18 +261,18 @@ export async function removeHoliday(id: string): Promise<ActionResult> {
 export async function respondToSuggestion(id: string, accept: boolean, choice?: string): Promise<ActionResult> {
   try {
     const user = await requireUser();
-    const s = getSuggestion(user.id, id);
+    const s = await getSuggestion(user.id, id);
     if (!s || s.status !== 'open') throw new InputError('Dieser Vorschlag ist nicht mehr aktuell.');
-    setSuggestionStatus(user.id, id, accept ? 'accepted' : 'dismissed');
+    await setSuggestionStatus(user.id, id, accept ? 'accepted' : 'dismissed');
     if (!accept) return done('Alles klar, ich lasse es so.');
     const action = s.payload.action;
     if (action === 'replan') {
-      applyPlan(user, proposePlan(user, { kind: 'all' }));
+      await applyPlan(user, await proposePlan(user, { kind: 'all' }));
       return done('Erledigt – dein Lernplan ist neu verteilt.');
     }
-    if (action === 'use_free_slot') return useFreeSlot(user, String(s.payload.startAt), String(s.payload.endAt));
+    if (action === 'use_free_slot') return await useFreeSlot(user, String(s.payload.startAt), String(s.payload.endAt));
     if (action === 'resolve_conflict') {
-      const ev = getEvent(user.id, String(s.payload.eventId));
+      const ev = await getEvent(user.id, String(s.payload.eventId));
       if (!ev) throw new InputError('Termin nicht gefunden.');
       await resolveConflict(user, ev, choice === 'remote' ? 'remote' : 'cloqi', s.payload.remote as never);
       return done(choice === 'remote' ? 'Die Version aus dem externen Kalender gilt.' : 'Die CLOQI-Version wurde übertragen.');
@@ -281,19 +281,19 @@ export async function respondToSuggestion(id: string, accept: boolean, choice?: 
   } catch (e) { return fail(e); }
 }
 
-function useFreeSlot(user: User, startAt: string, endAt: string): ActionResult {
+async function useFreeSlot(user: User, startAt: string, endAt: string): Promise<ActionResult> {
   const nowIso = new Date().toISOString();
-  const task = listTasks(user.id, { openOnly: true }).find(t => t.dueAt > endAt);
+  const task = (await listTasks(user.id, { openOnly: true })).find(t => t.dueAt > endAt);
   if (!task) return done('Gerade steht kein Test an – genieß die freie Zeit!');
   const day = utcToZoned(startAt, user.timezone).date;
   const { from, to } = dayRange(day, user.timezone);
-  const busy = busyIntervals(getCalendarItems(user, from, to, { includeHidden: true }));
+  const busy = busyIntervals(await getCalendarItems(user, from, to, { includeHidden: true }));
   const slot = freeSlots(day, user.timezone, busy, { ...user.prefs, studyStart: '00:00', studyEnd: '23:59', weekendStart: '00:00', weekendEnd: '23:59' }, new Date())
     .find(s => s.start < Date.parse(endAt) && s.end > Date.parse(startAt) && s.end > Date.parse(nowIso));
   if (!slot) return done('Die freie Stunde ist schon vorbei oder belegt.');
   const s = Math.max(slot.start, Date.parse(startAt));
   const e = Math.min(slot.end, Date.parse(endAt), s + user.prefs.blockMax * 60000);
-  insertBlocks(user.id, [{ taskId: task.id, startAt: new Date(s).toISOString(), endAt: new Date(e).toISOString(), note: 'Freistunde' }]);
+  await insertBlocks(user.id, [{ taskId: task.id, startAt: new Date(s).toISOString(), endAt: new Date(e).toISOString(), note: 'Freistunde' }]);
   return done(`Ich habe die freie Zeit für ${task.subject} eingeplant.`);
 }
 
@@ -304,14 +304,14 @@ export async function autoSync(): Promise<{ changed: boolean }> {
   const user = await requireUser();
   const stale = (iso: string | null) => !iso || Date.now() - Date.parse(iso) > 30 * 60000;
   let changed = false;
-  for (const c of listConnections(user.id)) {
+  for (const c of await listConnections(user.id)) {
     if (!stale(c.lastSyncAt) || c.status === 'expired') continue;
     try {
       if (c.provider === 'webuntis') { await syncWebUntis(user); changed = true; }
       if ((c.provider === 'google' || c.provider === 'outlook') && isConfigured(c.provider)) { await syncProvider(user, c.provider); changed = true; }
     } catch { /* status and error are stored on the connection */ }
   }
-  detectMissedBlocks(user);
+  await detectMissedBlocks(user);
   if (changed) revalidatePath('/', 'layout');
   return { changed };
 }
@@ -322,15 +322,15 @@ export async function setCycleModule(enabled: boolean, consent: boolean): Promis
   try {
     const user = await requireUser();
     if (enabled && !consent) throw new InputError('Bitte bestätige die Einwilligung zur Verarbeitung deiner Zyklusdaten.');
-    setCycleConsent(user.id, enabled);
-    updateUser(user.id, { prefs: { ...user.prefs, cycleEnabled: enabled, cycleInCalendar: enabled && user.prefs.cycleInCalendar } });
+    await setCycleConsent(user.id, enabled);
+    await updateUser(user.id, { prefs: { ...user.prefs, cycleEnabled: enabled, cycleInCalendar: enabled && user.prefs.cycleInCalendar } });
     return done(enabled ? 'CYCLE ist aktiviert.' : 'CYCLE ist deaktiviert und alle Zyklusdaten wurden gelöscht.');
   } catch (e) { return fail(e); }
 }
 
 export async function setCycleInCalendar(show: boolean): Promise<ActionResult> {
   const user = await requireUser();
-  updateUser(user.id, { prefs: { ...user.prefs, cycleInCalendar: show } });
+  await updateUser(user.id, { prefs: { ...user.prefs, cycleInCalendar: show } });
   return done(show ? 'Zyklus wird im CLOQI-Kalender angezeigt (nur in CLOQI).' : 'Ausgeblendet.');
 }
 
@@ -344,7 +344,7 @@ export async function logCycle(_prev: ActionResult | null, form: FormData): Prom
     if (!['period_start', 'period_end', 'log'].includes(type)) throw new InputError('Ungültiger Eintrag.');
     const opt = (k: string) => { const v = String(form.get(k) ?? ''); return v ? Math.min(5, Math.max(1, Number(v))) : null; };
     const allowed = ['Krämpfe', 'Kopfschmerzen', 'Müdigkeit', 'Rückenschmerzen', 'Hautunreinheiten', 'Heißhunger', 'Übelkeit', 'Brustspannen'];
-    addCycleEntry(user.id, {
+    await addCycleEntry(user.id, {
       date, type: type as 'period_start', mood: opt('mood'), energy: opt('energy'),
       symptoms: form.getAll('symptoms').map(String).filter(s => allowed.includes(s)),
       note: text(form, 'note', { max: 300 }) || null,
@@ -355,7 +355,7 @@ export async function logCycle(_prev: ActionResult | null, form: FormData): Prom
 
 export async function removeCycleEntry(id: string): Promise<ActionResult> {
   const user = await requireUser();
-  deleteCycleEntry(user.id, id);
+  await deleteCycleEntry(user.id, id);
   return done('Gelöscht.');
 }
 

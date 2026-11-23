@@ -9,28 +9,28 @@ import { CATEGORY_META, type User } from './types';
 // Apple Calendar (iPhone, iPad, Mac): a personal, unguessable iCalendar subscription.
 // This is a one-way sync CLOQI → Apple. Two-way sync would need CalDAV (not implemented).
 
-export function createOrRotateFeed(user: User): string {
+export async function createOrRotateFeed(user: User): Promise<string> {
   const token = randomToken(32);
-  upsertConnection(user.id, 'apple', {
+  await upsertConnection(user.id, 'apple', {
     status: 'connected', secretEnc: encrypt(token), lookupHash: sha256(token),
     config: { exportCategories: ['schule', 'lernen', 'pruefung', 'hausuebung', 'training', 'arbeit', 'freizeit', 'privat'] },
   });
   return token;
 }
 
-export function feedUrls(user: User): { https: string; webcal: string } | null {
-  const conn = getConnection(user.id, 'apple');
+export async function feedUrls(user: User): Promise<{ https: string; webcal: string } | null> {
+  const conn = await getConnection(user.id, 'apple');
   if (!conn?.secretEnc || conn.status !== 'connected') return null;
   const https = `${appUrl()}/api/feed/${decrypt(conn.secretEnc)}.ics`;
   return { https, webcal: https.replace(/^https?:\/\//, 'webcal://') };
 }
 
-export function buildFeed(user: User, now = new Date()): string {
-  const conn = getConnection(user.id, 'apple');
+export async function buildFeed(user: User, now = new Date()): Promise<string> {
+  const conn = await getConnection(user.id, 'apple');
   const cats = new Set(conn?.config.exportCategories ?? []);
   const from = new Date(now.getTime() - 14 * 86400000).toISOString();
   const to = new Date(now.getTime() + 90 * 86400000).toISOString();
-  const items = getCalendarItems(user, from, to, { includeHidden: true }).filter(i => cats.has(i.category) && i.status !== 'missed');
+  const items = (await getCalendarItems(user, from, to, { includeHidden: true })).filter(i => cats.has(i.category) && i.status !== 'missed');
   return buildIcs('CLOQI', items.map(i => ({
     uid: `${i.key}@cloqi`,
     title: i.kind === 'study' && i.status === 'done' ? `✓ ${i.title}` : i.title,

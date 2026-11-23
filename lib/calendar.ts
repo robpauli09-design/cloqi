@@ -32,24 +32,24 @@ function eventToItems(e: CalendarEvent, cal: UserCalendar | undefined, from: str
  * Everything that appears in the user's calendar between two instants.
  * `includeHidden` ignores the calendar visibility toggles (used for planning and conflicts).
  */
-export function getCalendarItems(user: User, fromIso: string, toIso: string, opts: { includeHidden?: boolean } = {}): CalendarItem[] {
+export async function getCalendarItems(user: User, fromIso: string, toIso: string, opts: { includeHidden?: boolean } = {}): Promise<CalendarItem[]> {
   const tz = user.timezone;
-  const calendars = listCalendars(user.id);
+  const calendars = await listCalendars(user.id);
   const calById = new Map(calendars.map(c => [c.id, c]));
   const main = calendars.find(c => c.kind === 'cloqi');
   const visible = (id: string | null | undefined) => opts.includeHidden || !id || calById.get(id)?.visible !== false;
   const items: CalendarItem[] = [];
 
-  for (const e of listEvents(user.id, fromIso, toIso)) {
+  for (const e of await listEvents(user.id, fromIso, toIso)) {
     const cal = calById.get(e.calendarId ?? '') ?? main;
     if (!visible(cal?.id)) continue;
     items.push(...eventToItems(e, cal, fromIso, toIso, tz));
   }
 
   const ttCal = calendars.find(c => c.kind === 'timetable');
-  const timetable = listTimetable(user.id);
+  const timetable = await listTimetable(user.id);
   if (timetable.length && visible(ttCal?.id)) {
-    const breaks = listBreaks(user.id);
+    const breaks = await listBreaks(user.id);
     const fromDay = utcToZoned(fromIso, tz).date;
     const toDay = utcToZoned(toIso, tz).date;
     for (let d = fromDay; d <= toDay; d = addDays(d, 1)) {
@@ -70,10 +70,10 @@ export function getCalendarItems(user: User, fromIso: string, toIso: string, opt
   }
 
   const studyCal = calendars.find(c => c.kind === 'study');
-  const tasks = listTasks(user.id);
+  const tasks = await listTasks(user.id);
   const taskById = new Map(tasks.map(t => [t.id, t]));
   if (visible(studyCal?.id)) {
-    for (const b of listBlocks(user.id, fromIso, toIso)) {
+    for (const b of await listBlocks(user.id, fromIso, toIso)) {
       const task = taskById.get(b.taskId);
       items.push({
         key: `sb:${b.id}`, kind: 'study', id: b.id, title: task ? `${task.subject} lernen` : 'Lernblock',
@@ -111,4 +111,4 @@ export function dayRange(date: string, tz: string, days = 1): { from: string; to
   return { from: zonedToUtc(date, '00:00', tz).toISOString(), to: zonedToUtc(addDays(date, days), '00:00', tz).toISOString() };
 }
 
-export function mainCalendarId(userId: string): string { return calendarOfKind(userId, 'cloqi').id; }
+export async function mainCalendarId(userId: string): Promise<string> { return (await calendarOfKind(userId, 'cloqi')).id; }
