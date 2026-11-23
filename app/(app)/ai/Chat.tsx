@@ -79,7 +79,40 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
   const docs = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const voice = useRecorder();
-  useEffect(() => { bottom.current?.scrollIntoView({ behavior: streaming ? 'auto' : 'smooth', block: 'end' }); }, [messages, pending, streaming]);
+  // Stick to the bottom like ChatGPT: while you are at the bottom, growing answers keep you there
+  // (instantly, no laggy smooth-scroll); scroll up to read and the view stays where you are.
+  const stick = useRef(true);
+  useEffect(() => {
+    const el = () => document.scrollingElement ?? document.documentElement;
+    const atBottom = () => el().scrollHeight - (el().scrollTop + window.innerHeight) < 40;
+    // only real user gestures decide – growing text or our own scrolling never "unstick" the view
+    const onWheel = (e: WheelEvent) => { if (e.deltaY < 0) stick.current = false; else if (atBottom()) stick.current = true; };
+    let touchY = 0;
+    const onTouchStart = (e: TouchEvent) => { touchY = e.touches[0].clientY; };
+    const onTouchMove = (e: TouchEvent) => {
+      const dy = e.touches[0].clientY - touchY; // finger moves down = page scrolls up
+      if (dy > 8) stick.current = false; else if (dy < -8 && atBottom()) stick.current = true;
+    };
+    const onTouchEnd = () => { if (atBottom()) stick.current = true; };
+    const onKey = (e: KeyboardEvent) => { if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) stick.current = false; };
+    const onScroll = () => { if (atBottom()) stick.current = true; };
+    window.addEventListener('wheel', onWheel, { passive: true });
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('wheel', onWheel); window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove); window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('keydown', onKey); window.removeEventListener('scroll', onScroll);
+    };
+  }, []);
+  useEffect(() => {
+    if (!stick.current) return;
+    const el = document.scrollingElement ?? document.documentElement;
+    el.scrollTop = el.scrollHeight;
+  }, [messages, pending, streaming]);
   useEffect(() => { // empty chat fits the screen: no rubber-band scrolling (iPhone) while nothing is written
     if (messages.length) return;
     const html = document.documentElement, body = document.body;
@@ -128,6 +161,7 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
     const sending = files;
     setMessages(m => [...m, { id: `u${++id.current}`, from: 'user', text: t + (sending.length ? `${t ? '\n' : ''}📎 ${sending.map(f => f.name).join(', ')}` : '') }]);
     setText(''); setFiles([]); setMenu(false);
+    stick.current = true;
     if (aiEnabled) {
       // answer is streamed: status first ("Schaut in deinen Kalender …"), then the text piece by piece
       const aid = `a${++id.current}`;

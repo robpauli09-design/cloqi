@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react';
+import { AppState } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { Tabs } from 'expo-router/js-tabs';
 import { TabBar } from '@/components/TabBar';
 import { loadLastTab, saveLastTab } from '@/lastTab';
+import { syncSoon } from '@/sync';
 import { colors } from '@/theme';
 
 export default function TabsLayout() {
@@ -21,6 +23,12 @@ export default function TabsLayout() {
     });
   }, [router]);
   useEffect(() => { if (restored.current) void saveLastTab(path); }, [path]);
+  // WebUntis changes (e.g. a lesson cancelled at short notice) show up when the app is opened again
+  useEffect(() => {
+    void syncSoon();
+    const sub = AppState.addEventListener('change', s => { if (s === 'active') void syncSoon(); });
+    return () => sub.remove();
+  }, []);
 
   return (
     <Tabs tabBar={() => <TabBar />} screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.paper } }}>

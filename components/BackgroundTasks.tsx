@@ -19,7 +19,15 @@ export function BackgroundTasks({ mascot }: { mascot: MascotName }) {
 
   useEffect(() => {
     let alive = true;
+    let lastSync = Date.now();
     autoSync().then(r => { if (alive && r.changed) router.refresh(); }).catch(() => undefined);
+    // back to the tab/app (e.g. phone unlocked): check WebUntis & co. again (server only refreshes if > 10 min old)
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || Date.now() - lastSync < 60_000) return;
+      lastSync = Date.now();
+      autoSync().then(r => { if (alive && r.changed) router.refresh(); }).catch(() => undefined);
+    };
+    document.addEventListener('visibilitychange', onVisible);
     const load = () => upcomingReminders().then(r => { reminders.current = r; }).catch(() => undefined);
     load();
     const reload = setInterval(load, 5 * 60000);
@@ -39,7 +47,8 @@ export function BackgroundTasks({ mascot }: { mascot: MascotName }) {
       }
       try { localStorage.setItem('cloqi:reminded', JSON.stringify(shown)); } catch { /* storage blocked */ }
     }, 30000);
-    return () => { alive = false; clearInterval(reload); clearInterval(tick); };
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible); alive = false; clearInterval(reload); clearInterval(tick); };
   }, [router, mascot]);
 
   return null;

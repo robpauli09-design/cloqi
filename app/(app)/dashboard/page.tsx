@@ -78,9 +78,28 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               <p className="muted">Genieß den freien Tag – oder <Link href="/ai" className="font-semibold text-leaf-dark underline">sag mir</Link>, was ansteht.</p>
             </div>
           ) : (
-            <ol className="relative mt-5 space-y-2 before:absolute before:bottom-2 before:left-[58px] before:top-2 before:w-px before:bg-line">
-              {d.items.map(i => <TimelineRow key={i.key} item={i} start={i.allDay ? 'Ganzt.' : t(i.startAt)} end={i.allDay ? '' : t(i.endAt)} past={i.endAt < nowIso} />)}
-            </ol>
+            (() => {
+              // short list: what is still coming (max. 4); the whole day behind "Alle anzeigen"
+              const row = (i: CalendarItem) => <TimelineRow key={i.key} item={i} start={i.allDay ? 'Ganzt.' : t(i.startAt)} end={i.allDay ? '' : t(i.endAt)} past={i.endAt < nowIso} />;
+              const next = d.items.filter(i => i.endAt >= nowIso || i.allDay).slice(0, 4);
+              const hidden = d.items.length - next.length;
+              const line = 'relative space-y-2 before:absolute before:bottom-2 before:left-[58px] before:top-2 before:w-px before:bg-line';
+              return (
+                <>
+                  {next.length > 0
+                    ? <ol className={`mt-5 ${line}`}>{next.map(row)}</ol>
+                    : <p className="mt-4 text-sm text-ink-soft">Für heute ist alles erledigt. 🎉</p>}
+                  {hidden > 0 && (
+                    <details className="group mt-3">
+                      <summary className="cursor-pointer list-none text-sm font-semibold text-leaf-dark">
+                        <span className="group-open:hidden">Alle {d.items.length} anzeigen</span><span className="hidden group-open:inline">Weniger anzeigen</span>
+                      </summary>
+                      <ol className={`mt-3 ${line}`}>{d.items.map(row)}</ol>
+                    </details>
+                  )}
+                </>
+              );
+            })()
           )}
           {d.freeToday.length > 0 && (
             <p className="mt-4 rounded-xl bg-leaf-soft px-4 py-3 text-sm text-leaf-dark">

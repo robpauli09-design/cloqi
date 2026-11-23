@@ -53,7 +53,24 @@ export default function Ai() {
   useEffect(() => {
     api<{ enabled: boolean }>('/ai').then(r => setEnabled(r.enabled)).catch(() => {});
   }, []);
-  useEffect(() => { setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50); }, [messages, busy]);
+  // Stick to the bottom like ChatGPT: at the bottom, growing answers keep you there; scroll up and it stays put.
+  const stick = useRef(true);
+  const lastY = useRef(0);
+  const dragging = useRef(false);
+  type ScrollEv = { nativeEvent: { contentOffset: { y: number }; contentSize: { height: number }; layoutMeasurement: { height: number } } };
+  const gapOf = ({ nativeEvent: n }: ScrollEv) => n.contentSize.height - (n.contentOffset.y + n.layoutMeasurement.height);
+  // our own auto-scroll only ever moves down – so moving up is always the user: stop following.
+  // Reaching the bottom again (not while the finger is still on the list) resumes following.
+  const onScroll = (e: ScrollEv) => {
+    const y = e.nativeEvent.contentOffset.y;
+    if (y < lastY.current - 2 && gapOf(e) >= 40) stick.current = false;
+    else if (!dragging.current && gapOf(e) < 40) stick.current = true;
+    lastY.current = y;
+  };
+  const onDragStart = () => { dragging.current = true; stick.current = false; };
+  const onDragEnd = (e: ScrollEv) => { dragging.current = false; if (gapOf(e) < 40) stick.current = true; };
+
+  const follow = () => { if (stick.current) list.current?.scrollToEnd({ animated: false }); };
 
   const stopRecorder = useCallback(async () => {
     setRecording(false);
@@ -87,6 +104,7 @@ export default function Ai() {
     if ((!message && !files.length) || busy) return;
     const sending = files;
     setText(''); setFiles([]);
+    stick.current = true;
     setMessages(m => [...m, { id: `u${Date.now()}`, role: 'user', content: message + (sending.length ? `${message ? '\n' : ''}📎 ${sending.map(f => f.name).join(', ')}` : '') }]);
     setBusy(true);
     // the answer is streamed: status first ("Schaut in deinen Kalender …"), then the text piece by piece
@@ -205,6 +223,12 @@ export default function Ai() {
         <FlatList
           ref={list}
           data={messages}
+          onScroll={onScroll}
+          onScrollBeginDrag={onDragStart}
+          onScrollEndDrag={onDragEnd}
+          onMomentumScrollEnd={onDragEnd}
+          scrollEventThrottle={32}
+          onContentSizeChange={follow}
           keyExtractor={m => m.id}
           contentContainerStyle={{ padding: 16, gap: 10, flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"

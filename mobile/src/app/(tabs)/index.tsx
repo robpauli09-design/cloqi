@@ -8,6 +8,7 @@ import { api, errorText, type Item, type Today } from '@/api';
 import { useAuth } from '@/auth';
 import { addDays, dayNum, formatLong, greeting, monthYear, relativeDay, startOfWeek, WEEKDAYS_SHORT } from '@/dates';
 import { DayView } from '@/components/DayView';
+import { onSynced, syncSoon } from '@/sync';
 import { ItemRow } from '@/components/ItemRow';
 import { Mascot } from '@/components/Mascot';
 import { Card, ErrorBox, Pill, Segmented, T } from '@/components/ui';
@@ -40,7 +41,8 @@ function useApi<T>(path: string) {
     if (pull) setRefreshing(true);
     try { setData(await api<T>(path)); setError(null); } catch (e) { setError(errorText(e)); } finally { setRefreshing(false); }
   }, [path]);
-  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
+  useFocusEffect(useCallback(() => { void reload(); void syncSoon(); }, [reload]));
+  useEffect(() => onSynced(() => { void reload(); }), [reload]);
   return { data, error, refreshing, reload };
 }
 
@@ -84,7 +86,7 @@ function TodayView() {
             <T variant="muted" style={{ textAlign: 'center' }}>Sag CLOQI AI einfach, was ansteht.</T>
           </View>
         )}
-        {data?.items.map(i => <ItemRow key={i.key} item={i} onPress={() => router.push({ pathname: '/termin', params: { item: JSON.stringify(i) } })} />)}
+        {data && <DayList items={data.items} today={data.today} onOpen={i => router.push({ pathname: '/termin', params: { item: JSON.stringify(i) } })} />}
         {data?.freeToday[0] && (
           <View style={st.free}><T style={{ color: colors.leafDeep, fontFamily: font.medium }}>Freie Zeit: {data.freeToday[0].start}–{data.freeToday[0].end} Uhr</T></View>
         )}
@@ -105,6 +107,26 @@ function TodayView() {
         </Card>
       )}
     </ScrollView>
+  );
+}
+
+/** "Mein Tag": only what is still coming (max. 4), the whole day behind "Alle anzeigen". */
+function DayList({ items, today, onOpen }: { items: Item[]; today: string; onOpen(i: Item): void }) {
+  const [all, setAll] = useState(false);
+  const now = new Date();
+  const hm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const upcoming = items.filter(i => i.allDay || i.date > today || i.end > hm);
+  const shown = all ? items : upcoming.slice(0, 4);
+  return (
+    <>
+      {!all && !upcoming.length && items.length > 0 && <T variant="muted">Für heute ist alles erledigt. 🎉</T>}
+      {shown.map(i => <ItemRow key={i.key} item={i} onPress={() => onOpen(i)} />)}
+      {items.length > shown.length || all ? (
+        <Pressable onPress={() => setAll(a => !a)} hitSlop={8} accessibilityRole="button">
+          <T style={{ color: colors.leafDark, fontFamily: font.bold }}>{all ? 'Weniger anzeigen' : `Alle ${items.length} anzeigen`}</T>
+        </Pressable>
+      ) : null}
+    </>
   );
 }
 
@@ -139,7 +161,8 @@ function CalendarView({ mode }: { mode: 'tag' | 'liste' }) {
     catch (e) { setError(errorText(e)); }
     finally { setRefreshing(false); }
   }, [monday]);
-  useFocusEffect(useCallback(() => { void reload(); }, [reload]));
+  useFocusEffect(useCallback(() => { void reload(); void syncSoon(); }, [reload]));
+  useEffect(() => onSynced(() => { void reload(); }), [reload]);
   const swipe = useCallback((dir: 1 | -1) => { void Haptics.selectionAsync(); setSelected(d => (d ? addDays(d, dir) : d)); }, []);
 
   if (!selected || !monday) return <View style={st.scroll}><ErrorBox text={error} /></View>;
