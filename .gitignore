@@ -1,8 +1,22 @@
-node_modules/
-dist/
+# dependencies
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
 *.tsbuildinfo
+
+# local data (SQLite database, generated dev keys)
+/.data/
+
+# env files
 .env*
 !.env.example
-.vercel/
-.sites-runtime/
-artifacts/
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+.vercel
+.superpowers/

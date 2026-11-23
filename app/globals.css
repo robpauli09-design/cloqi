@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-paper text-ink antialiased; font-feature-settings: 'ss01'; }
+  h1, h2, h3 { text-wrap: balance; }
+  :focus-visible { outline: 2px solid #7CC51B; outline-offset: 2px; }
+  input[type='date'], input[type='time'] { min-height: 2.5rem; }
+  /* grid items may shrink below their content width (wide tables scroll inside their own box) */
+  .grid > * { min-width: 0; }
+}
+
+@layer components {
+  .card { @apply min-w-0 bg-white rounded-2xl shadow-card border border-line/60; }
+  .card-pad { @apply p-5 sm:p-6; }
+  .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition
+    disabled:opacity-50 disabled:cursor-not-allowed active:scale-[.98]; }
+  .btn-primary { @apply btn bg-leaf-dark text-white hover:bg-leaf-deep shadow-sm; }
+  .btn-lime { @apply btn bg-lime text-leaf-deep hover:bg-leaf hover:text-white shadow-sm; }
+  .btn-ghost { @apply btn text-ink-soft hover:bg-leaf-soft hover:text-leaf-dark; }
+  .btn-outline { @apply btn border border-line bg-white text-ink hover:border-leaf hover:text-leaf-dark; }
+  .btn-danger { @apply btn text-danger hover:bg-danger-soft; }
+  .btn-sm { @apply px-3 py-1.5 text-xs rounded-lg; }
+  .input { @apply w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-faint
+    focus:border-leaf focus:outline-none focus:ring-4 focus:ring-leaf/15 transition; }
+  .label { @apply block text-xs font-semibold text-ink-soft mb-1.5; }
+  .chip { @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold; }
+  .eyebrow { @apply text-[11px] font-bold uppercase tracking-[.12em] text-ink-faint; }
+  .h1 { @apply font-display text-2xl sm:text-3xl font-semibold tracking-tight text-ink; }
+  .h2 { @apply font-display text-lg font-semibold text-ink; }
+  .muted { @apply text-sm text-ink-soft; }
+  .toggle { @apply relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full bg-line transition; }
+  .toggle[data-on='true'] { @apply bg-leaf; }
+  .toggle > span { @apply inline-block h-5 w-5 translate-x-0.5 rounded-full bg-white shadow transition; }
+  .toggle[data-on='true'] > span { @apply translate-x-[22px]; }
+}
+
+@layer utilities {
+  .tabular { font-variant-numeric: tabular-nums; }
+  .scrollbar-thin { scrollbar-width: thin; }
+  .safe-bottom { padding-bottom: max(0.5rem, env(safe-area-inset-bottom)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}

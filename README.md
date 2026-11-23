@@ -1,148 +1,128 @@
-# CLOQI
+# CLOQI – Your day. Your flow.
 
-Deutschsprachige Anwendung für Prozessverbesserungen mit React, TypeScript und Vite. Das Backend verbindet einen eigenen KI-Server (LocalAI, OpenAI-kompatible Schnittstelle) für KI-Antworten und Supabase für Anmeldung und gespeicherte Arbeitsbereiche. Vercel kann Oberfläche und API gemeinsam aus diesem Repository bereitstellen.
+CLOQI ist ein Kalender, der mitdenkt: Stundenplan, Termine, externe Kalender, Lernzeiten,
+Training und Freizeit an einem Ort. CLOQI plant Lernblöcke selbst um dein Leben herum und
+schlägt Änderungen vor, wenn sich etwas verschiebt. Begleitet wirst du von **Cloki** (oder **Clea**).
 
-**Aktueller Prototyp:** Ein gemeinsamer Benutzername-/Passwort-Login öffnet automatisch Management, Abteilungsleitung oder Mitarbeiteransicht. JuliaSommer, SarahBerger und LukasHuber verwenden jeweils `123456`. Diese öffentlichen Demo-Zugänge speichern Aufgaben lokal; sie sind keine produktive Authentifizierung. Das Backend ist vorbereitet, Supabase-Projekt und Vercel-Projekt wurden angelegt. Echte Demo-KI benötigt den konfigurierten KI-Server (`AI_BASE_URL`, `AI_MODEL`), `DEMO_AI_ENABLED=true` und die Demo-Kontingent-Migration. Die weiter unten beschriebene Supabase-Anmeldung ist die Grundlage für eine spätere produktive Anmeldung, nicht ein zweiter Login in der aktuellen Oberfläche.
+> Diese Version ist die **Webapp (Desktop, Tablet, Smartphone-Browser)**. Native iOS/Android-Apps,
+> Push-Nachrichten bei geschlossener App und Widgets sind für Phase 5 geplant.
 
-**Datenimport:** Unter „Daten importieren“ können Management und Abteilungsleitung CSV, XLSX, JSON, PDF, DOCX und TXT einlesen, Zuordnungen prüfen und Prozessdaten übernehmen. Verarbeitung und Speicherung erfolgen lokal im Browser. Details, Grenzen und Datenschutz: [Lokaler Import-Flow](IMPORTS.md).
+## Schnellstart
 
-## Echte Funktionen und Beispieldaten
+Voraussetzung: **Node.js 22.5 oder neuer** (CLOQI nutzt die eingebaute SQLite-Datenbank von Node).
 
-| Bereich | Verhalten |
-| --- | --- |
-| Assistent, Prozessanalyse, Artikelzusammenfassung | Mit konfiguriertem KI-Server echte Anfragen über das Backend. Ohne KI-Server ausdrücklich gekennzeichnete Demo-Antworten. Ein Fehler bei einem echten Aufruf wird angezeigt und nicht durch eine Demo-Antwort verdeckt. |
-| Anmeldung | Drei lokale Prototyp-Konten mit automatischer Rollenansicht; keine manuelle Rollenauswahl. |
-| Aufgaben, Missionsfortschritt, Feedback, Einstellungen, KI-Prozessanalysen | Bei den Prototyp-Konten getrennt im Browser; Supabase-Arbeitsbereiche sind im Backend für echte Auth-Sitzungen vorbereitet. |
-| Unternehmensdaten-Import | Lokale Dateiverarbeitung und bestätigte Speicherung in IndexedDB; kein automatischer Versand an Cloud oder KI. |
-| Fabrikbild, Prozesse, Kennzahlen, Diagramme, Team und Wissensartikel | Statische Beispieldaten, keine Maschinen-, ERP- oder MES-Anbindung. |
-| Einsparungen und Fabrikverbesserungen | Illustrative Simulation; erledigte Aufgaben erzeugen keine gemessenen Produktionswerte. |
-
-Die KI erhält ausgewählte Beispielprozesse bzw. Artikel und bei Chat/Analyse einen begrenzten Aufgabenkontext. Eine echte Antwort macht Beispieldaten nicht zu Betriebsdaten. CLOQI versendet keine Teamnachrichten und steuert keine Maschinen. Wissensartikel ersetzen keine freigegebenen Betriebsanweisungen. Chatverlauf und einzelne Artikelzusammenfassungen werden nicht dauerhaft im Arbeitsbereich gespeichert. Der Standortschalter verwendet denselben Beispieldatensatz unter verschiedenen Namen. Teameinladungen sind noch nicht implementiert; Mitgliedschaften verwaltet derzeit ein Datenbankadministrator.
-
-## Lokal starten
-
-Voraussetzung: **Node.js 24 LTS** und npm.
-
-```powershell
-npm ci
-if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```bash
+npm install
+cp .env.example .env.local     # Werte nach Bedarf eintragen
+npm run dev                    # http://localhost:3000
 ```
 
-Werte in `.env` ergänzen, dann:
+Ohne weitere Konfiguration funktionieren: Registrierung/Login, Onboarding, Kalender (Tag/Woche/Monat/Agenda),
+Termine & Wiederholungen, Kalendergruppen, Learn, Life, CLOQI AI (inkl. Spracheingabe im Browser),
+manueller Stundenplan, ICS-/CSV-Import, WebUntis über den iCal-Link, Apple-Kalender-Abo, Cycle.
 
-```powershell
-npm run dev
+Für **Google Kalender** und **Outlook** brauchst du eigene OAuth-Zugangsdaten (siehe unten) –
+ohne sie zeigt die App das ehrlich an und täuscht keine Verbindung vor.
+
+```bash
+npm test          # Unit-Tests der Planungs-, Datums-, iCal-, Zyklus- und Sprachlogik
+npm run typecheck
+npm run build && npm start
 ```
-
-Die App läuft unter [http://localhost:5173](http://localhost:5173). Der gemeinsame Entwicklungsserver `server/dev.ts` lädt `.env`, bedient `/api` und bindet Vite für die Oberfläche ein. Nach Änderungen an `.env` neu starten. Der Kopierbefehl überschreibt keine vorhandene `.env`.
-
-Für lokale KI-Tests reichen zunächst `AI_BASE_URL` und `AI_MODEL`. Ohne Supabase bleiben Arbeitsbereiche im Browser; dieser Entwicklungsmodus ist für den lokalen Rechner gedacht. Auf Vercel erfordern geschützte API-Funktionen eine gültige Supabase-Anmeldung.
-
-```powershell
-npm test
-npm run build
-```
-
-Der Produktionsbuild liegt in `dist/`. `npm run preview` zeigt nur den statischen Frontend-Build und stellt die API nicht bereit. Für vollständige lokale Tests `npm run dev` verwenden.
 
 ## Umgebungsvariablen
 
-`.env.example` enthält die Vorlage ohne Zugangsdaten. Die echte `.env` gehört nicht ins Repository.
-
 | Variable | Zweck |
-| --- | --- |
-| `AI_BASE_URL` | Adresse des eigenen KI-Servers inklusive `/v1`, etwa `http://65.21.215.168:8086/v1`. Nur auf dem Server. |
-| `AI_MODEL` | Modellname auf dem KI-Server (Liste: `<AI_BASE_URL>/models`). Empfohlen: `qwen3.6-35b-a3b` (35 Mrd. Parameter, davon 3 Mrd. aktiv, läuft gut auf der CPU). |
-| `AI_PROMPT_FORMAT` | `chatml` für den CLOQI-LocalAI-Server: CLOQI setzt den Qwen-Prompt selbst zusammen und nutzt `/completions`, weil dessen Chat-Endpunkte die Antwort verlieren. Standard `chat` für OpenAI-kompatible Server mit funktionierendem Chat-Endpunkt. |
-| `AI_API_KEY` | Optional: nur nötig, wenn auf dem KI-Server ein API-Schlüssel gesetzt ist. Ausschließlich auf dem Server. |
-| `AI_TIMEOUT_MS` | Optional: Wartezeit auf die KI, Standard 150000, höchstens 170000 (Vercel bricht nach 180 s ab). |
-| `VITE_SUPABASE_URL` | Öffentliche Supabase-Projekt-URL für Anmeldung und Cloud-Speicherung. |
-| `VITE_SUPABASE_PUBLISHABLE_KEY` | Öffentlicher Publishable Key, normalerweise beginnend mit `sb_publishable_`. |
-| `SUPABASE_URL` / `SUPABASE_PUBLISHABLE_KEY` | Optionale Server-Aliase. Sonst verwendet das Backend die beiden `VITE_SUPABASE_*`-Werte. Falls gesetzt, dasselbe Projekt wie im Frontend verwenden. |
-| `ALLOWED_ORIGINS` | Optional: zusätzliche Browser-Ursprünge, durch Kommas getrennt, mit Protokoll und ohne Pfad. Der eigene Ursprung ist automatisch erlaubt. |
-| `VITE_API_BASE_URL` | Optional: Backend-Ursprung, etwa `https://cloqi.example.com`, ohne `/api`. Im gemeinsamen Vercel-Projekt leer lassen; für spätere getrennte Clients vorgesehen. |
+|---|---|
+| `APP_URL` | Öffentliche Adresse (OAuth-Redirects, Kalender-Feed-Links) |
+| `CLOQI_ENCRYPTION_KEY` | 32 Byte base64 – verschlüsselt OAuth-Tokens, WebUntis-Link, Feed-Token und Zyklusdaten. **In Produktion Pflicht.** In der Entwicklung wird automatisch einer unter `.data/` erzeugt. |
+| `DATABASE_PATH` | Pfad der SQLite-Datei (Standard `.data/cloqi.db`) |
+| `DEFAULT_TIMEZONE` | Zeitzone neuer Konten (Standard `Europe/Vienna`) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud Console → OAuth-Client (Webanwendung). Redirect: `{APP_URL}/api/integrations/google/callback`. Calendar API aktivieren. |
+| `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT` | Azure-Portal → App-Registrierung. Redirect: `{APP_URL}/api/integrations/outlook/callback`. Berechtigung `Calendars.ReadWrite`. |
+| `CRON_SECRET` | Schützt `POST /api/cron/sync` (regelmäßige Hintergrund-Synchronisierung, z. B. alle 30 Min) |
 
-Alle `VITE_`-Variablen werden öffentlich in den Frontend-Build eingebaut. Die `AI_*`-Werte dürfen **niemals** dieses Präfix erhalten. Diese Anwendung braucht keinen Supabase Secret Key und keinen `service_role`-Schlüssel: Sie nutzt den Publishable Key zusammen mit dem Zugriffstoken des angemeldeten Benutzers. Siehe [Supabase API-Schlüssel](https://supabase.com/docs/guides/getting-started/api-keys).
+## Funktionen
 
-## Supabase erstmals einrichten
+**Kalender** – Tages-, Wochen-, Monats- und Agendaansicht · Termine erstellen, bearbeiten, verschieben
+(Drag-and-drop), duplizieren, löschen · Zeitraum aufziehen zum Erstellen · aktuelle Uhrzeit · freie Zeiträume
+· Konflikte markiert · Wiederholungen (täglich, wöchentlich, alle 2 Wochen, monatlich, jährlich, benutzerdefiniert)
+mit „nur dieser Termin“ / „ganze Serie“ · Erinnerungen · Kalendergruppen mit Farbe und Ein-/Ausblenden ·
+Quelle jedes Termins sichtbar.
 
-1. Im [Supabase-Dashboard](https://supabase.com/dashboard) eine Organisation und ein neues Projekt anlegen. Region und Datenbankpasswort wählen, dann auf die Bereitstellung warten. Das Datenbankpasswort ist kein `.env`-Wert.
-2. Im **SQL Editor** die Dateien in `supabase/migrations/` vollständig und in dieser Reihenfolge je einmal ausführen: `202609220001_kloqi_backend.sql` (Arbeitsbereiche, Mitgliedschaften, gespeicherte Zustände, KI-Limits, Berechtigungen), `202609230001_demo_ai_quota.sql` (gemeinsames Demo-Budget), `202611080001_cloqi_rename.sql` (Umbenennung KLOQI → CLOQI), `202611180001_ai_queue.sql` (KI-Warteschlange). Einzelne Tabellen allein reichen nicht. Bestehende Datenbanken brauchen nur die noch fehlenden Dateien. Details: `supabase/README.md`.
-3. In den Data-API-Einstellungen `public` exponiert lassen. **`cloqi_private` darf nicht exponiert werden.** Die Migration enthält die nötigen Grants und RLS-Regeln; keine pauschalen Schreibrechte ergänzen.
-4. Im **Connect**-Dialog Projekt-URL und Publishable Key kopieren; alternativ den Schlüssel unter **Settings → API Keys** finden. Die beiden `VITE_SUPABASE_*`-Werte in `.env` setzen.
-5. Unter **Authentication → URL Configuration** zunächst `http://localhost:5173` als **Site URL** setzen. Redirect URLs: `http://localhost:5173/**` und bei Nutzung auch `http://127.0.0.1:5173/**`.
-6. Nach dem Vercel-Deployment die **Site URL** auf die feste Produktionsadresse umstellen, etwa `https://dein-projekt.vercel.app`. Diese tatsächliche Rücksprungadresse mit abschließendem `/` zusätzlich erlauben. Lokale Einträge können bestehen bleiben; für Preview-Tests nur die benötigten Preview-Adressen ergänzen.
-7. E-Mail/Passwort-Anmeldung und Registrierung in Supabase Auth prüfen. Einen Benutzer registrieren, die Bestätigungs-E-Mail öffnen und anmelden. Bei eingeschränkter Zustellung die Auth-/SMTP-Konfiguration prüfen; für reguläre Benutzer einen eigenen geeigneten SMTP-Versand einrichten.
+**Kalender verbinden**
+| Dienst | Richtung | Technik |
+|---|---|---|
+| Google Kalender | beidseitig (Import ausgewählter Kalender, Export von CLOQI-Terminen, Änderungen in beide Richtungen) | Google Calendar API, OAuth 2.0 |
+| Outlook | beidseitig, wie Google | Microsoft Graph, OAuth 2.0 |
+| Apple Kalender / iCloud | **einseitig** CLOQI → Apple (abonnierbarer webcal-Feed) | iCalendar-Feed mit geheimem Link |
+| WebUntis | Import WebUntis → CLOQI (WebUntis bleibt maßgeblich) | persönlicher iCal-Link aus WebUntis |
+| Andere | Import | ICS- und CSV-Dateien |
 
-Beim ersten angemeldeten Laden richtet die App einen Arbeitsbereich ein; spätere Änderungen werden gespeichert. Supabase empfiehlt für Produktion genaue Rücksprungadressen, Wildcards vor allem für Entwicklung und Vorschauen: [Auth Redirect URLs](https://supabase.com/docs/guides/auth/redirect-urls).
+Keine Duplikate: jede externe Event-ID ist einem CLOQI-Datensatz zugeordnet (`sync_map`, `external_uid`).
+Keine stillen Überschreibungen: Wurde ein Termin in CLOQI **und** extern geändert, fragt CLOQI nach.
 
-## Später auf Vercel veröffentlichen
+**Learn** – Tests/Schularbeiten/Hausübungen eintragen (Formular, Text oder Sprache) · Lernplan-Vorschlag vor
+dem Speichern · mehrere Tests parallel nach Datum, Schwierigkeit und Zeit priorisiert · Lernblöcke abhaken ·
+„Alles neu planen“ · CLOQI meldet, wenn die Zeit nicht reicht, statt unrealistisch zu planen.
 
-Diese Einrichtung ist noch ausstehend und wurde nicht automatisch ausgeführt.
+**Automatische Umplanung** – verpasste Lernblöcke, Stundenentfall (WebUntis), Verschiebungen und
+Raumänderungen erzeugen Vorschläge, die du annimmst oder ablehnst. Private/externe Termine werden nie
+ohne Zustimmung verändert.
 
-1. Das private Repository [robpauli09-design/cloqi](https://github.com/robpauli09-design/cloqi) verwenden. Es enthält Lockfile, `.env.example`, `vercel.json` und SQL-Migration. Die echte `.env` ist vom Upload ausgeschlossen.
-2. In [Vercel](https://vercel.com/new) das Repository importieren. Repository-Hauptverzeichnis als Root Directory, **Vite** als Framework und Node.js **24.x** verwenden.
-3. `vercel.json` setzt Installation auf `npm ci`, Build auf `npm run build` und Ausgabe auf `dist`. Die Dateien in `api/` werden zusätzlich als Functions bereitgestellt.
-4. Unter **Settings → Environment Variables** mindestens `AI_BASE_URL`, `AI_MODEL`, `VITE_SUPABASE_URL` und `VITE_SUPABASE_PUBLISHABLE_KEY` setzen. Production erhält die Produktionswerte; Preview braucht passende eigene Werte, idealerweise ein Test-Supabase-Projekt. Zusätzliche Server-Aliase sind nicht nötig.
-5. `VITE_API_BASE_URL` leer lassen. `ALLOWED_ORIGINS` ist bei gemeinsamer Web-App/API-Domain ebenfalls nicht nötig. Für einen späteren getrennten Client dessen konkrete Origin ergänzen.
-6. Deployment starten und die Supabase-Redirects ergänzen. Nach Änderungen an Build-Variablen neu deployen: `VITE_*` wird beim Build eingebaut.
-7. Anmeldung, Speichern und KI wie unten prüfen. Erst dann ist die Cloud-Anbindung bestätigt.
+**Life** – Routinen (Training, Arbeit, Freunde …) an mehreren Wochentagen, freie Zeit der Woche.
 
-Die API nutzt native Web-Handler mit `export default { fetch(request: Request): Promise<Response> }`. Auf Vercel läuft kein eigener dauerhafter Entwicklungsserver. Dies entspricht der [Node.js-Functions-Dokumentation](https://vercel.com/docs/functions/runtimes/node-js).
+**CLOQI AI** – versteht deutsche Kalenderbefehle („Ich habe am Freitag einen Englisch-Test“, „Trag morgen um
+17 Uhr Training ein“, „Plane mir nächste Woche drei Lernstunden für BWL ein“, „Verschiebe mein Training auf
+Freitag“, „Wann habe ich diese Woche Zeit?“). Antworten beruhen nur auf echten Kalenderdaten; Änderungen
+erst nach Bestätigung. Die Erkennung ist regelbasiert und läuft komplett auf dem eigenen Server; ein
+EU-gehostetes Sprachmodell kann später hinter derselben Schnittstelle (`lib/assistant.ts`) ergänzt werden.
 
-Der SPA-Rewrite leitet Seitenpfade einschließlich verschachtelter Pfade auf `/index.html`. `/api` und alle `/api/...`-Pfade sind ausdrücklich ausgenommen; vorhandene Dateien werden regulär ausgeliefert. Ein unbekannter API-Pfad darf keine HTML-Oberfläche liefern. Grundlage: [Vercel Rewrite-Regeln](https://vercel.com/docs/project-configuration/vercel-json#negative-lookahead). Der Fallback liefert die App aus, fügt ihr aber keine neuen Navigationsrouten hinzu.
+**Gamification** – Tagesziel, Lernserien (Streak), Wochenfortschritt, Abzeichen – dezent.
 
-## Prüfung und Fehlersuche
+**Cycle (optional)** – Zyklus-Tracker mit Clea, nur nach ausdrücklicher Einwilligung (Art. 9 DSGVO),
+verschlüsselt gespeichert, nie exportiert oder synchronisiert, Widerruf löscht alle Daten. Schätzungen,
+keine medizinische Beratung.
 
-`npm test` prüft API-Logik und SQL-Migration lokal. Die Datenbanktests nutzen PGlite mit PostgreSQL-Rollen, Grants und RLS. Das ersetzt keine Prüfung gehosteter Supabase Auth/Data API oder einer Vercel-Bereitstellung. `npx tsc -p tsconfig.server.json` prüft Servertypen; Zod 4 validiert gemeinsame Ein- und Ausgaben.
+## Architektur
 
-Nach der Cloud-Einrichtung prüfen:
+```
+app/            Next.js App Router (Seiten, Server Actions in app/actions, API-Routen in app/api)
+components/     UI (Kalenderansichten, Maskottchen, Formulare)
+lib/
+  scheduler.ts    Planungsalgorithmus (rein, getestet)
+  recurrence.ts   Wiederholungen inkl. Sommerzeit (rein, getestet)
+  ics.ts          iCalendar lesen/schreiben (rein, getestet)
+  assistant.ts    Sprachbefehle → Absichten (rein, getestet)
+  cycle.ts        Zyklus-Schätzung (rein, getestet)
+  calendar.ts     führt alle Quellen zu einer Kalenderansicht zusammen
+  planning.ts     Lernplan vorschlagen/anwenden, verpasste Blöcke erkennen
+  webuntis.ts     iCal-Abruf mit SSRF-Schutz, Entfall-/Änderungserkennung
+  integrations.ts Google/Outlook OAuth + Zwei-Wege-Sync
+  feed.ts         Apple-Kalender-Feed
+  db.ts, repo.ts  SQLite (node:sqlite) + Datenzugriff
+```
 
-- `/api/status` liefert JSON mit Konfigurationsstatus. Ein gesetzter Schlüssel beweist noch keine erfolgreiche Anbieter-Verbindung.
-- Registrierung bestätigen, anmelden, Aufgabe ändern und Seite neu laden: Der Stand bleibt gespeichert.
-- Zweiten Benutzer verwenden: Der erste private Arbeitsbereich ist unzugänglich. Zusätzlich Supabase Security Advisor prüfen.
-- Assistent, Prozessanalyse und Zusammenfassung ausführen: echte Antwort oder verständlicher Fehler, keine verdeckte Demo-Ersatzantwort.
-- Ohne Anmeldung eine geschützte API aufrufen: kein Cloud-Arbeitsbereich und keine kostenpflichtige KI-Anfrage.
-- Verschachtelten Seitenpfad direkt laden: App wird ausgeliefert. `/api/nicht-vorhanden` darf dagegen keine HTML-App liefern.
+## Sicherheit & Datenschutz
 
-| Symptom | Prüfen |
-| --- | --- |
-| API liefert HTML/404 | Projekt-Root, `api/` und `vercel.json`; `npm run preview` enthält kein Backend. |
-| Anmeldung fehlt | Beide öffentlichen Supabase-Werte setzen; Dev-Server neu starten bzw. neu bauen. |
-| Rücksprung nach Registrierung scheitert | Site URL und Redirect-Liste müssen zur tatsächlich verwendeten Adresse passen. |
-| Arbeitsbereich lädt nicht | Vollständige Migration, übereinstimmende Projektwerte, aktive Data API und gültige Anmeldung. |
-| KI nicht konfiguriert/Modell nicht verfügbar | `AI_BASE_URL`, `AI_MODEL` und die Modellliste des KI-Servers prüfen. |
-| KI-Limit erreicht / Zeitüberschreitung | Auslastung des KI-Servers und die App-Limits prüfen. |
-| Änderung kollidiert mit anderem Tab | Aktuellen Serverstand laden, dann die Änderung erneut vornehmen. Alte Zustände werden nicht blind überschrieben. |
+- Passwörter mit scrypt gehasht; Sitzungen als zufälliges Token (nur der Hash wird gespeichert), httpOnly-Cookie.
+- OAuth-Tokens, WebUntis-Link, Feed-Token und Zyklusdaten AES-256-GCM-verschlüsselt.
+- OAuth mit `state`-Prüfung; Kalenderverbindungen jederzeit trennbar (Google-Token wird widerrufen).
+- WebUntis-Abruf nur an `*.webuntis.com`, ohne fremde Weiterleitungen, mit Größen- und Zeitlimit.
+- Jede Datenbankabfrage ist an die Benutzer-ID gebunden; Eingaben werden serverseitig validiert.
+- CSRF: Server Actions prüfen den Origin, API-Routen zusätzlich per Middleware; Sicherheits-Header gesetzt.
+- Schriften werden beim Build lokal eingebunden – keine Anfragen an Google aus dem Browser.
+- DSGVO: Datenexport (JSON) und Account-Löschung im Profil.
+- **EU-Hosting:** Die SQLite-Datei braucht einen Server mit dauerhaftem Speicher in der EU (z. B. eine VM in
+  Frankfurt/Wien). Für mehrere Server-Instanzen `lib/db.ts` auf Postgres in einer EU-Region umstellen.
 
-KI-Warteschlange: Der eigene KI-Server beantwortet eine Anfrage nach der anderen. Jede KI-Anfrage holt sich deshalb zuerst einen Platz in einer gemeinsamen Warteschlange in Supabase (`/api/ai-queue`), die Oberfläche zeigt die Position an, und erst wer an der Reihe ist, darf `/api/ai` bzw. `/api/demo-ai` einmal aufrufen. Der Beitritt verbraucht das jeweilige Kontingent. Höchstens 30 Plätze; wer 30 Sekunden nicht nachfragt oder seinen Zug nicht innerhalb von 20 Sekunden antritt, verliert den Platz. Gleichzeitige KI-Aufrufe und Länge stehen in `cloqi_private.ai_queue_slots()` und `ai_queue_capacity()` und werden per Migration geändert.
+## Was noch fehlt (ehrlich)
 
-Cloud-KI-Limits: **20 Anfragen pro UTC-Minute und 200 pro UTC-Tag je Benutzer**, serverinstanzübergreifend durch Supabase. Auch nachgelagert fehlgeschlagene Aufrufe verbrauchen eine Reservierung. Sie schützen auch den eigenen KI-Server vor Überlastung. Weitere Details und Testgrenzen: `supabase/README.md`.
-
-## Codeaufbau
-
-- `src/App.tsx`, `src/Pages.tsx`: Oberfläche und Arbeitsabläufe; `src/data.ts`: Domänenmodelle und Beispieldaten.
-- `src/services/`: Frontend-Adapter; `shared/contracts.ts`: gemeinsame Typen und Zod-Validierung.
-- `api/status.ts`, `api/ai.ts`, `api/workspace.ts`: Vercel-Einstiegspunkte; `server/`: gemeinsame API-Logik und lokaler Server.
-- `supabase/migrations/`: SQL-Einrichtung; `test/`: automatisierte Prüfungen.
-- `src/useWorkspaceTools.ts`: optionale WebMCP-Aktionen per Feature Detection; ohne Unterstützung bleibt die Oberfläche bedienbar.
-- `src/styles.css`: CLOQI-Farbpalette und responsive Komponenten.
-
-## Später als mobile oder Desktop-App
-
-Oberfläche, API und Datenbank bleiben getrennt. Dies sind **eigene grobe Entwicklungsschätzungen** für den heutigen Umfang; neue Funktionen, vollständige Offline-Synchronisierung und Store-Wartezeiten kommen hinzu.
-
-| Ziel | Ansatz | Aufwand |
-| --- | --- | --- |
-| Installierbare Web-App | PWA: Oberfläche behalten, Manifest/Icons und Caching ergänzen | 2–5 Arbeitstage |
-| Android und iOS | Capacitor: Web-Oberfläche wiederverwenden, native Hülle und Veröffentlichung ergänzen | 2–4 Wochen |
-| Windows und macOS | Tauri: Vite-Oberfläche behalten, Installer, Updates und Desktop-Integration | 1–3 Wochen |
-| Durchgehend native mobile Oberfläche | React Native/Expo: Backend und viele Typen/Regeln behalten, Oberfläche/Navigation weitgehend neu bauen | 6–12+ Wochen |
-
-Offizielle Grundlagen: [PWA](https://web.dev/learn/pwa/), [Capacitor](https://capacitorjs.com/docs), [Tauri mit Vite](https://v2.tauri.app/start/frontend/), [Expo und DOM-Komponenten](https://docs.expo.dev/workflow/web/).
-
-Native Clients brauchen zusätzlich Login-Deep-Links, Sitzungsspeicherung, Signierung, Store-Einrichtung und Gerätetests. iOS-Builds benötigen macOS/Xcode oder einen Cloud-Build-Dienst. Push und Offline-Synchronisierung sind eigene Funktionen: Eine App-Hülle macht Supabase-Zugriffe oder serverseitige KI nicht automatisch offlinefähig. Der Zugang zum KI-Server bleibt immer im Backend; getrennte Clients nutzen eine konfigurierte API-Adresse.
-
-## Bildquellen
-
-Die Maskottchen unter `public/assets/cloqi-*.png` sind unveränderte Kopien der bereitgestellten Bilder. `public/assets/factory.png` wurde mit ImageGen für diesen Prototyp erzeugt; Prompt siehe `ASSETS.md`. Die Fabrik ist eine stilisierte Illustration und kein maßstabsgetreuer realer Standort.
+- Native Apps (iOS/Android), echte Push-Nachrichten bei geschlossener App, Widgets, EventKit.
+- Beidseitige Apple-Synchronisierung (CalDAV).
+- Anmeldung mit Google/Apple (Buttons sind als „bald“ markiert).
+- Google/Outlook-Sync per Änderungs-Webhooks – aktuell regelmäßige Prüfung (beim Öffnen der App alle 30 Min
+  und per Cron).
+- Teilnehmer/Einladungen bei Terminen.
+- Die Google-/Outlook-Synchronisierung ist implementiert, konnte aber ohne echte OAuth-Zugangsdaten nicht
+  gegen die echten APIs getestet werden.

@@ -1,0 +1,361 @@
+'use server';
+
+import { revalidatePath } from 'next/cache';
+import { redirect } from 'next/navigation';
+import { destroySession, requireUser } from '@/lib/auth';
+import { busyIntervals, dayRange, getCalendarItems } from '@/lib/calendar';
+import { encrypt } from '@/lib/crypto';
+import { parseTimetableCsv } from '@/lib/csv';
+import { createOrRotateFeed } from '@/lib/feed';
+import { parseIcs } from '@/lib/ics';
+import { isConfigured, listRemoteCalendars, PROVIDER_LABEL, resolveConflict, revokeAccess, syncProvider, type OAuthProvider } from '@/lib/integrations';
+import { applyPlan, detectMissedBlocks, proposePlan } from '@/lib/planning';
+import {
+  addBreak, addCycleEntry, addTimetableEntry, deleteBreak, deleteConnection, deleteCycleEntry, deleteTimetableEntry, deleteUser,
+  getConnection, getEvent, getSuggestion, getTimetableEntry, insertBlocks, listConnections, listTasks, setCycleConsent,
+  setSuggestionStatus, setTimetableExdates, updateUser, upsertConnection,
+} from '@/lib/repo';
+import { freeSlots } from '@/lib/scheduler';
+import { isValidDate, isValidTime, todayIn, utcToZoned } from '@/lib/time';
+import { CATEGORIES, USER_TYPE_LABELS, type Category, type Prefs, type Subject, type User, type UserType } from '@/lib/types';
+import { fail, InputError, int, text, time, type ActionResult } from '@/lib/validate';
+import { normalizeWebUntisUrl, syncWebUntis, upsertFeedEvents, fetchCalendar, isWebUntisHost } from '@/lib/webuntis';
+
+function done(message: string): ActionResult {
+  revalidatePath('/', 'layout');
+  return { ok: true, message };
+}
+
+// ---------- onboarding ----------
+
+export async function completeOnboarding(form: FormData) {
+  const user = await requireUser();
+  const name = text(form, 'name', { max: 40 }) || user.email.split('@')[0];
+  const type = String(form.get('userType') ?? '') as UserType;
+  const areas = form.getAll('areas').map(String).filter(a => ['schule', 'arbeit', 'training', 'privat'].includes(a));
+  const mascot = form.get('mascot') === 'clea' ? 'clea' : 'cloki';
+  updateUser(user.id, {
+    name, userType: type in USER_TYPE_LABELS ? type : 'sonstiges', lifeAreas: areas, onboarded: true,
+    prefs: { ...user.prefs, mascot },
+  });
+  const next = String(form.get('next') ?? '');
+  redirect(['/connect', '/connect#webuntis', '/connect#manual', '/connect#import'].includes(next) ? next : '/dashboard?welcome=1');
+}
+
+// ---------- profile & preferences ----------
+
+export async function saveProfile(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const type = String(form.get('userType') ?? '') as UserType;
+    const tz = String(form.get('timezone') ?? user.timezone);
+    try { new Intl.DateTimeFormat('en', { timeZone: tz }); } catch { throw new InputError('Unbekannte Zeitzone.'); }
+    updateUser(user.id, {
+      name: text(form, 'name', { required: true, max: 40, label: 'Name' }),
+      userType: type in USER_TYPE_LABELS ? type : user.userType,
+      timezone: tz,
+      prefs: { ...user.prefs, mascot: form.get('mascot') === 'clea' ? 'clea' : 'cloki' },
+    });
+    return done('Profil gespeichert.');
+  } catch (e) { return fail(e); }
+}
+
+export async function savePrefs(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const prefs: Prefs = {
+      ...user.prefs,
+      studyStart: time(form, 'studyStart', 'Lernbeginn'), studyEnd: time(form, 'studyEnd', 'Lernende'),
+      weekendStart: time(form, 'weekendStart', 'Wochenende ab'), weekendEnd: time(form, 'weekendEnd', 'Wochenende bis'),
+      studyOnSunday: form.get('studyOnSunday') === 'on',
+      maxStudyPerDay: int(form, 'maxStudyPerDay', 30, 480), blockMax: int(form, 'blockMax', 15, 180),
+      breakMin: int(form, 'breakMin', 0, 60), dailyGoalMin: int(form, 'dailyGoalMin', 0, 480),
+      reminderDefault: int(form, 'reminderDefault', 0, 1440),
+    };
+    if (prefs.studyEnd <= prefs.studyStart || prefs.weekendEnd <= prefs.weekendStart) throw new InputError('Das Ende der Lernzeit muss nach dem Beginn liegen.');
+    updateUser(user.id, { prefs });
+    return done('Lernpräferenzen gespeichert.');
+  } catch (e) { return fail(e); }
+}
+
+export async function addSubject(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const name = text(form, 'subject', { required: true, max: 40, label: 'Fach' });
+    const difficulty = int(form, 'difficulty', 1, 3, 2) as Subject['difficulty'];
+    const subjects = user.prefs.subjects.filter(s => s.name.toLowerCase() !== name.toLowerCase());
+    updateUser(user.id, { prefs: { ...user.prefs, subjects: [...subjects, { name, difficulty }].slice(0, 40) } });
+    return done(`${name} gespeichert.`);
+  } catch (e) { return fail(e); }
+}
+
+export async function removeSubject(name: string): Promise<ActionResult> {
+  const user = await requireUser();
+  updateUser(user.id, { prefs: { ...user.prefs, subjects: user.prefs.subjects.filter(s => s.name !== name) } });
+  return done('Fach entfernt.');
+}
+
+export async function deleteAccount(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  const user = await requireUser();
+  if (String(form.get('confirm') ?? '').trim().toUpperCase() !== 'LÖSCHEN') return { ok: false, error: 'Bitte tippe LÖSCHEN zur Bestätigung.' };
+  for (const p of ['google', 'outlook'] as OAuthProvider[]) await revokeAccess(user, p).catch(() => undefined);
+  deleteUser(user.id);
+  await destroySession();
+  redirect('/login?deleted=1');
+}
+
+// ---------- connections ----------
+
+export async function connectWebUntis(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const url = normalizeWebUntisUrl(text(form, 'url', { required: true, max: 2000, label: 'Kalender-Link' }));
+    // test the link before storing it
+    parseIcs(await fetchCalendar(url, isWebUntisHost), user.timezone);
+    upsertConnection(user.id, 'webuntis', { status: 'connected', secretEnc: encrypt(url.toString()) });
+    const stats = await syncWebUntis(user);
+    return done(`WebUntis verbunden: ${stats.imported} Stunden übernommen${stats.cancelled ? `, ${stats.cancelled} davon entfallen` : ''}.`);
+  } catch (e) { return fail(e); }
+}
+
+export async function syncNow(provider: 'webuntis' | OAuthProvider): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    if (provider === 'webuntis') {
+      const s = await syncWebUntis(user);
+      return done(`Aktualisiert: ${s.imported} neu, ${s.updated} geändert, ${s.cancelled + s.removed} entfallen.`);
+    }
+    if (!isConfigured(provider)) throw new InputError(`${PROVIDER_LABEL[provider]} ist auf diesem Server nicht eingerichtet.`);
+    const s = await syncProvider(user, provider);
+    return done(`${PROVIDER_LABEL[provider]}: ${s.pulled} übernommen, ${s.pushed} übertragen, ${s.deleted} entfernt${s.conflicts ? `, ${s.conflicts} Konflikte` : ''}.`);
+  } catch (e) { return fail(e); }
+}
+
+export async function disconnect(provider: 'webuntis' | 'apple' | OAuthProvider): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    if (provider === 'google' || provider === 'outlook') await revokeAccess(user, provider);
+    deleteConnection(user.id, provider);
+    return done('Verbindung getrennt. Importierte Termine wurden aus CLOQI entfernt.');
+  } catch (e) { return fail(e); }
+}
+
+export async function saveProviderSettings(provider: OAuthProvider, _prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const conn = getConnection(user.id, provider);
+    if (!conn) throw new InputError('Nicht verbunden.');
+    const available = conn.config.availableCalendars ?? [];
+    const imports = form.getAll('import').map(String).filter(id => available.some(c => c.id === id));
+    const exportId = String(form.get('exportCalendarId') ?? '');
+    const exportCats = form.getAll('exportCategories').map(String).filter((c): c is Category => CATEGORIES.includes(c as Category));
+    upsertConnection(user.id, provider, {
+      config: {
+        importCalendarIds: imports,
+        exportCalendarId: available.some(c => c.id === exportId && c.writable) ? exportId : undefined,
+        exportCategories: exportCats,
+      },
+    });
+    return done('Gespeichert. Die Änderungen gelten ab der nächsten Synchronisierung.');
+  } catch (e) { return fail(e); }
+}
+
+export async function refreshProviderCalendars(provider: OAuthProvider): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    upsertConnection(user.id, provider, { config: { availableCalendars: await listRemoteCalendars(user, provider) } });
+    return done('Kalenderliste aktualisiert.');
+  } catch (e) { return fail(e); }
+}
+
+export async function enableAppleFeed(): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    createOrRotateFeed(user);
+    return done('Dein persönlicher Kalender-Link ist bereit. Ein alter Link funktioniert ab jetzt nicht mehr.');
+  } catch (e) { return fail(e); }
+}
+
+export async function saveFeedCategories(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const cats = form.getAll('exportCategories').map(String).filter((c): c is Category => CATEGORIES.includes(c as Category));
+    upsertConnection(user.id, 'apple', { config: { exportCategories: cats } });
+    return done('Gespeichert.');
+  } catch (e) { return fail(e); }
+}
+
+// ---------- timetable ----------
+
+export async function addLesson(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const startTime = time(form, 'start', 'Beginn');
+    const endTime = time(form, 'end', 'Ende');
+    if (endTime <= startTime) throw new InputError('Das Ende muss nach dem Beginn liegen.');
+    addTimetableEntry(user.id, {
+      source: 'manual', subject: text(form, 'subject', { required: true, max: 60, label: 'Fach' }),
+      weekday: int(form, 'weekday', 1, 7), startTime, endTime,
+      room: text(form, 'room', { max: 40 }) || null, teacher: text(form, 'teacher', { max: 60 }) || null,
+      institution: text(form, 'institution', { max: 80 }) || null,
+    });
+    return done('Unterrichtseinheit gespeichert – sie erscheint jede Woche.');
+  } catch (e) { return fail(e); }
+}
+
+export async function removeLesson(id: string): Promise<ActionResult> {
+  const user = await requireUser();
+  deleteTimetableEntry(user.id, id);
+  return done('Unterrichtseinheit gelöscht.');
+}
+
+/** Marks one lesson of the manual timetable as not taking place on a given date. */
+export async function cancelLessonOnce(id: string, date: string): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const entry = getTimetableEntry(user.id, id);
+    if (!entry || !isValidDate(date)) throw new InputError('Unterrichtseinheit nicht gefunden.');
+    setTimetableExdates(user.id, id, [...new Set([...entry.exdates, date])]);
+    return done(`${entry.subject} entfällt an diesem Tag.`);
+  } catch (e) { return fail(e); }
+}
+
+export async function importTimetableFile(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const file = form.get('file');
+    if (!(file instanceof File) || !file.size) throw new InputError('Bitte wähle eine Datei.');
+    if (file.size > 3 * 1024 * 1024) throw new InputError('Die Datei ist zu groß (max. 3 MB).');
+    const content = await file.text();
+    if (/\.ics$/i.test(file.name) || content.includes('BEGIN:VCALENDAR')) {
+      const events = parseIcs(content, user.timezone, new Date(Date.now() + 365 * 86400000));
+      const category = (CATEGORIES.includes(String(form.get('category')) as Category) ? String(form.get('category')) : 'schule') as Category;
+      const s = upsertFeedEvents(user, 'ics', null, events, category);
+      return done(`${s.imported} Termine importiert${s.updated ? `, ${s.updated} aktualisiert` : ''}.`);
+    }
+    const { lessons, errors } = parseTimetableCsv(content);
+    if (!lessons.length) throw new InputError(errors[0] ?? 'Keine Unterrichtseinheiten gefunden.');
+    for (const l of lessons) addTimetableEntry(user.id, { ...l, source: 'csv', institution: null });
+    return done(`${lessons.length} Unterrichtseinheiten importiert${errors.length ? ` (${errors.length} Zeilen übersprungen)` : ''}.`);
+  } catch (e) { return fail(e); }
+}
+
+export async function addHoliday(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const from = String(form.get('from') ?? ''), to = String(form.get('to') ?? '');
+    if (!isValidDate(from) || !isValidDate(to) || to < from) throw new InputError('Bitte gib einen gültigen Zeitraum an.');
+    addBreak(user.id, text(form, 'name', { max: 40 }) || 'Ferien', from, to);
+    return done('Gespeichert – in diesem Zeitraum wird kein Unterricht angezeigt.');
+  } catch (e) { return fail(e); }
+}
+
+export async function removeHoliday(id: string): Promise<ActionResult> {
+  const user = await requireUser();
+  deleteBreak(user.id, id);
+  return done('Entfernt.');
+}
+
+// ---------- suggestions ----------
+
+export async function respondToSuggestion(id: string, accept: boolean, choice?: string): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const s = getSuggestion(user.id, id);
+    if (!s || s.status !== 'open') throw new InputError('Dieser Vorschlag ist nicht mehr aktuell.');
+    setSuggestionStatus(user.id, id, accept ? 'accepted' : 'dismissed');
+    if (!accept) return done('Alles klar, ich lasse es so.');
+    const action = s.payload.action;
+    if (action === 'replan') {
+      applyPlan(user, proposePlan(user, { kind: 'all' }));
+      return done('Erledigt – dein Lernplan ist neu verteilt.');
+    }
+    if (action === 'use_free_slot') return useFreeSlot(user, String(s.payload.startAt), String(s.payload.endAt));
+    if (action === 'resolve_conflict') {
+      const ev = getEvent(user.id, String(s.payload.eventId));
+      if (!ev) throw new InputError('Termin nicht gefunden.');
+      await resolveConflict(user, ev, choice === 'remote' ? 'remote' : 'cloqi', s.payload.remote as never);
+      return done(choice === 'remote' ? 'Die Version aus dem externen Kalender gilt.' : 'Die CLOQI-Version wurde übertragen.');
+    }
+    return done('Danke!');
+  } catch (e) { return fail(e); }
+}
+
+function useFreeSlot(user: User, startAt: string, endAt: string): ActionResult {
+  const nowIso = new Date().toISOString();
+  const task = listTasks(user.id, { openOnly: true }).find(t => t.dueAt > endAt);
+  if (!task) return done('Gerade steht kein Test an – genieß die freie Zeit!');
+  const day = utcToZoned(startAt, user.timezone).date;
+  const { from, to } = dayRange(day, user.timezone);
+  const busy = busyIntervals(getCalendarItems(user, from, to, { includeHidden: true }));
+  const slot = freeSlots(day, user.timezone, busy, { ...user.prefs, studyStart: '00:00', studyEnd: '23:59', weekendStart: '00:00', weekendEnd: '23:59' }, new Date())
+    .find(s => s.start < Date.parse(endAt) && s.end > Date.parse(startAt) && s.end > Date.parse(nowIso));
+  if (!slot) return done('Die freie Stunde ist schon vorbei oder belegt.');
+  const s = Math.max(slot.start, Date.parse(startAt));
+  const e = Math.min(slot.end, Date.parse(endAt), s + user.prefs.blockMax * 60000);
+  insertBlocks(user.id, [{ taskId: task.id, startAt: new Date(s).toISOString(), endAt: new Date(e).toISOString(), note: 'Freistunde' }]);
+  return done(`Ich habe die freie Zeit für ${task.subject} eingeplant.`);
+}
+
+// ---------- background sync ----------
+
+/** Called by the app shell: refreshes stale connections and detects missed study blocks. */
+export async function autoSync(): Promise<{ changed: boolean }> {
+  const user = await requireUser();
+  const stale = (iso: string | null) => !iso || Date.now() - Date.parse(iso) > 30 * 60000;
+  let changed = false;
+  for (const c of listConnections(user.id)) {
+    if (!stale(c.lastSyncAt) || c.status === 'expired') continue;
+    try {
+      if (c.provider === 'webuntis') { await syncWebUntis(user); changed = true; }
+      if ((c.provider === 'google' || c.provider === 'outlook') && isConfigured(c.provider)) { await syncProvider(user, c.provider); changed = true; }
+    } catch { /* status and error are stored on the connection */ }
+  }
+  detectMissedBlocks(user);
+  if (changed) revalidatePath('/', 'layout');
+  return { changed };
+}
+
+// ---------- cycle module (sensitive data) ----------
+
+export async function setCycleModule(enabled: boolean, consent: boolean): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    if (enabled && !consent) throw new InputError('Bitte bestätige die Einwilligung zur Verarbeitung deiner Zyklusdaten.');
+    setCycleConsent(user.id, enabled);
+    updateUser(user.id, { prefs: { ...user.prefs, cycleEnabled: enabled, cycleInCalendar: enabled && user.prefs.cycleInCalendar } });
+    return done(enabled ? 'CYCLE ist aktiviert.' : 'CYCLE ist deaktiviert und alle Zyklusdaten wurden gelöscht.');
+  } catch (e) { return fail(e); }
+}
+
+export async function setCycleInCalendar(show: boolean): Promise<ActionResult> {
+  const user = await requireUser();
+  updateUser(user.id, { prefs: { ...user.prefs, cycleInCalendar: show } });
+  return done(show ? 'Zyklus wird im CLOQI-Kalender angezeigt (nur in CLOQI).' : 'Ausgeblendet.');
+}
+
+export async function logCycle(_prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    if (!user.prefs.cycleEnabled) throw new InputError('CYCLE ist nicht aktiviert.');
+    const date = String(form.get('date') ?? todayIn(user.timezone));
+    if (!isValidDate(date)) throw new InputError('Ungültiges Datum.');
+    const type = String(form.get('type'));
+    if (!['period_start', 'period_end', 'log'].includes(type)) throw new InputError('Ungültiger Eintrag.');
+    const opt = (k: string) => { const v = String(form.get(k) ?? ''); return v ? Math.min(5, Math.max(1, Number(v))) : null; };
+    const allowed = ['Krämpfe', 'Kopfschmerzen', 'Müdigkeit', 'Rückenschmerzen', 'Hautunreinheiten', 'Heißhunger', 'Übelkeit', 'Brustspannen'];
+    addCycleEntry(user.id, {
+      date, type: type as 'period_start', mood: opt('mood'), energy: opt('energy'),
+      symptoms: form.getAll('symptoms').map(String).filter(s => allowed.includes(s)),
+      note: text(form, 'note', { max: 300 }) || null,
+    });
+    return done('Eingetragen.');
+  } catch (e) { return fail(e); }
+}
+
+export async function removeCycleEntry(id: string): Promise<ActionResult> {
+  const user = await requireUser();
+  deleteCycleEntry(user.id, id);
+  return done('Gelöscht.');
+}
+

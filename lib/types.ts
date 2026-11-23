@@ -1,0 +1,229 @@
+export type UserType = 'schueler' | 'student' | 'lehrer' | 'berufstaetig' | 'sonstiges';
+
+export const USER_TYPE_LABELS: Record<UserType, string> = {
+  schueler: 'Schüler/in',
+  student: 'Student/in',
+  lehrer: 'Lehrer/in',
+  berufstaetig: 'Berufstätig',
+  sonstiges: 'Sonstiges',
+};
+
+export type Category =
+  | 'schule' | 'lernen' | 'pruefung' | 'hausuebung'
+  | 'training' | 'arbeit' | 'freizeit' | 'privat';
+
+export const CATEGORIES: Category[] = ['schule', 'lernen', 'pruefung', 'hausuebung', 'training', 'arbeit', 'freizeit', 'privat'];
+
+export const CATEGORY_META: Record<Category, { label: string; color: string; soft: string; text: string }> = {
+  schule:     { label: 'Schule / Uni',  color: '#286B24', soft: '#E3EFE1', text: '#1E5A1B' },
+  lernen:     { label: 'Lernen',        color: '#7CC51B', soft: '#EDF6E3', text: '#3D6B0B' },
+  pruefung:   { label: 'Prüfung',       color: '#E5484D', soft: '#FCE4E4', text: '#A8262B' },
+  hausuebung: { label: 'Hausübung',     color: '#F08C2E', soft: '#FDEBD8', text: '#A55912' },
+  training:   { label: 'Training',      color: '#1FA59A', soft: '#DDF3F1', text: '#13706A' },
+  arbeit:     { label: 'Arbeit',        color: '#9A7B4F', soft: '#F3EBDD', text: '#6B5233' },
+  freizeit:   { label: 'Freizeit',      color: '#E06A9E', soft: '#FBE5EF', text: '#A33A69' },
+  privat:     { label: 'Privat',        color: '#5B6472', soft: '#E9EBEE', text: '#3B424D' },
+};
+
+export interface Subject { name: string; difficulty: 1 | 2 | 3 }
+
+export interface Prefs {
+  studyStart: string;        // weekday earliest study time, HH:MM
+  studyEnd: string;          // weekday latest end of study, HH:MM
+  weekendStart: string;
+  weekendEnd: string;
+  studyOnSunday: boolean;
+  maxStudyPerDay: number;    // minutes
+  blockMax: number;          // max minutes per block
+  breakMin: number;          // buffer around fixed appointments
+  dailyGoalMin: number;      // minutes of study per day for the daily goal
+  reminderDefault: number;   // minutes before
+  subjects: Subject[];
+  mascot: 'cloki' | 'clea';
+  cycleEnabled: boolean;
+  cycleInCalendar: boolean;
+}
+
+export const DEFAULT_PREFS: Prefs = {
+  studyStart: '15:00',
+  studyEnd: '20:30',
+  weekendStart: '10:00',
+  weekendEnd: '18:00',
+  studyOnSunday: false,
+  maxStudyPerDay: 120,
+  blockMax: 60,
+  breakMin: 15,
+  dailyGoalMin: 45,
+  reminderDefault: 15,
+  subjects: [],
+  mascot: 'cloki',
+  cycleEnabled: false,
+  cycleInCalendar: false,
+};
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+  userType: UserType | null;
+  timezone: string;
+  onboarded: boolean;
+  lifeAreas: string[];
+  prefs: Prefs;
+  createdAt: string;
+}
+
+export type EventSource = 'manual' | 'webuntis' | 'ics' | 'google' | 'outlook' | 'assistant';
+
+export type CalendarKind = 'cloqi' | 'custom' | 'study' | 'timetable' | 'webuntis' | 'google' | 'outlook' | 'ics';
+
+export interface UserCalendar {
+  id: string;
+  userId: string;
+  name: string;
+  color: string;
+  kind: CalendarKind;
+  connectionId: string | null;
+  externalId: string | null;
+  visible: boolean;
+  writable: boolean;
+}
+
+export interface CalendarEvent {
+  id: string;
+  userId: string;
+  calendarId: string | null;
+  title: string;
+  description: string | null;
+  startAt: string;
+  endAt: string;
+  allDay: boolean;
+  category: Category;
+  source: EventSource;
+  externalUid: string | null;
+  connectionId: string | null;
+  status: 'active' | 'cancelled';
+  location: string | null;
+  teacher: string | null;
+  reminderMinutes: number | null;
+  recurrenceFreq: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
+  recurrenceInterval: number;
+  recurrenceUntil: string | null;
+  exdates: string[];
+  seriesId: string | null;
+  syncState: 'clean' | 'dirty' | 'conflict';
+  remoteVersion: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimetableEntry {
+  id: string;
+  userId: string;
+  source: 'manual' | 'csv';
+  subject: string;
+  teacher: string | null;
+  room: string | null;
+  institution: string | null;
+  weekday: number;   // 1 = Monday
+  startTime: string;
+  endTime: string;
+  exdates: string[]; // single lessons that do not take place (YYYY-MM-DD)
+}
+
+export type TaskKind = 'test' | 'schularbeit' | 'pruefung' | 'hausuebung' | 'referat' | 'lernziel';
+export const TASK_KIND_LABELS: Record<TaskKind, string> = {
+  test: 'Test', schularbeit: 'Schularbeit', pruefung: 'Prüfung', hausuebung: 'Hausübung', referat: 'Referat', lernziel: 'Lernziel',
+};
+
+export interface Task {
+  id: string;
+  userId: string;
+  title: string;
+  subject: string;
+  kind: TaskKind;
+  dueAt: string;
+  estimatedMinutes: number;
+  difficulty: 1 | 2 | 3;
+  status: 'open' | 'done';
+  priority: 1 | 2 | 3;
+  notBefore: string | null;   // planning starts on this day (YYYY-MM-DD)
+  createdAt: string;
+}
+
+export interface StudyBlock {
+  id: string;
+  userId: string;
+  taskId: string;
+  startAt: string;
+  endAt: string;
+  status: 'planned' | 'done' | 'missed';
+  completedAt: string | null;
+  note: string | null;
+}
+
+export type Provider = 'webuntis' | 'google' | 'outlook' | 'apple';
+
+export interface CalendarConnection {
+  id: string;
+  userId: string;
+  provider: Provider;
+  status: 'connected' | 'error' | 'expired' | 'disconnected';
+  config: ConnectionConfig;
+  lastSyncAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+}
+
+export interface ConnectionConfig {
+  exportCategories?: Category[];
+  exportCalendarId?: string;          // external calendar that receives CLOQI events
+  importCalendarIds?: string[];       // external calendars imported into CLOQI
+  availableCalendars?: { id: string; name: string; writable: boolean; primary?: boolean }[];
+  account?: string;
+}
+
+export interface Suggestion {
+  id: string;
+  userId: string;
+  kind: 'cancellation' | 'missed' | 'change' | 'conflict' | 'sync_conflict' | 'info';
+  message: string;
+  payload: Record<string, unknown>;
+  status: 'open' | 'accepted' | 'dismissed';
+  createdAt: string;
+}
+
+/** A unified, display-ready item for calendar views. */
+export interface CalendarItem {
+  key: string;
+  kind: 'event' | 'lesson' | 'study' | 'deadline';
+  id: string;
+  title: string;
+  startAt: string;
+  endAt: string;
+  allDay: boolean;
+  category: Category;
+  status: 'active' | 'cancelled' | 'done' | 'missed' | 'planned';
+  source: string;
+  location: string | null;
+  teacher: string | null;
+  description: string | null;
+  readOnly: boolean;
+  taskId: string | null;
+  reminderMinutes: number | null;
+  calendarLabel: string;
+  calendarId: string | null;
+  calendarColor: string | null;
+  recurring: boolean;
+  occurrenceDate: string | null;
+}
+
+export interface CycleEntry {
+  id: string;
+  date: string;                       // YYYY-MM-DD
+  type: 'period_start' | 'period_end' | 'log';
+  mood: number | null;                // 1–5
+  energy: number | null;              // 1–5
+  symptoms: string[];
+  note: string | null;
+}
