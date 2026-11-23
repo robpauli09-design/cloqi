@@ -60,9 +60,27 @@ function sweep(now: number) {
   for (const [k, v] of failures) if (v.resetAt < now) failures.delete(k);
 }
 
-export function isThrottled(key: string, max: number): boolean {
-  const a = failures.get(key);
-  return Boolean(a && a.resetAt > Date.now() && a.count >= max);
+/**
+ * Checks all limits and, if none is exceeded, counts the attempt immediately – synchronously,
+ * before any await – so parallel requests cannot slip through between check and count.
+ * Call `refund` for keys that should not count after a successful attempt.
+ */
+export function tryConsume(limits: [key: string, max: number][]): boolean {
+  const now = Date.now();
+  const blocked = limits.some(([key, max]) => {
+    const a = failures.get(key);
+    return Boolean(a && a.resetAt > now && a.count >= max);
+  });
+  if (blocked) return false;
+  recordFailure(...limits.map(([key]) => key));
+  return true;
+}
+
+export function refund(...keys: string[]) {
+  for (const key of keys) {
+    const a = failures.get(key);
+    if (a && a.count > 0) a.count--;
+  }
 }
 
 export function recordFailure(...keys: string[]) {
