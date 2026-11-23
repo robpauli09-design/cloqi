@@ -6,6 +6,7 @@ import { addRoutineAction, deleteEventAction } from '@/app/actions/calendar';
 import { WEEKDAYS_SHORT_DE } from '@/lib/time';
 import { toastResult } from '@/components/Toaster';
 import { FormMessage, SubmitButton } from '@/components/ui';
+import { Select } from '@/components/Select';
 
 const PRESETS = [
   { title: 'Training', category: 'training', start: '17:00', end: '18:30' },
@@ -32,9 +33,9 @@ export function LifeForms() {
         <div><label className="label" htmlFor="r-title">Was?</label><input id="r-title" name="title" required maxLength={80} className="input" placeholder="z. B. Fußballtraining" /></div>
         <div>
           <label className="label" htmlFor="r-cat">Kategorie</label>
-          <select id="r-cat" name="category" defaultValue="training" className="input">
+          <Select id="r-cat" name="category" defaultValue="training" className="input">
             <option value="training">Training</option><option value="arbeit">Arbeit</option><option value="freizeit">Freizeit</option><option value="privat">Privat</option>
-          </select>
+          </Select>
         </div>
       </div>
       <fieldset>

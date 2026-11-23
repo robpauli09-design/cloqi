@@ -13,6 +13,7 @@ import { CATEGORIES, CATEGORY_META, type CalendarItem, type UserCalendar } from 
 import { StudyCheck } from '../ItemActions';
 import { toastResult } from '../Toaster';
 import { CategoryChip, FormMessage, SubmitButton } from '../ui';
+import { Select } from '@/components/Select';
 
 export type DialogState =
   | { mode: 'create'; date: string; start: string; end: string }
@@ -202,15 +203,15 @@ function EventForm({ state, calendars, reminderDefault, onClose }: {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="ev-cat">Kategorie</label>
-            <select id="ev-cat" name="category" defaultValue={d?.category ?? 'privat'} className="input">
+            <Select id="ev-cat" name="category" defaultValue={d?.category ?? 'privat'} className="input">
               {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_META[c].label}</option>)}
-            </select>
+            </Select>
           </div>
           <div>
             <label className="label" htmlFor="ev-cal">Kalender</label>
-            <select id="ev-cal" name="calendarId" defaultValue={d?.calendarId ?? writable[0]?.id} className="input" disabled={Boolean(external)}>
+            <Select id="ev-cal" name="calendarId" defaultValue={d?.calendarId ?? writable[0]?.id} className="input" disabled={Boolean(external)}>
               {writable.map(c => <option key={c.id} value={c.id}>{c.name}{c.kind === 'google' ? ' (Google)' : c.kind === 'outlook' ? ' (Outlook)' : ''}</option>)}
-            </select>
+            </Select>
             {external && <input type="hidden" name="calendarId" value={d!.calendarId ?? ''} />}
           </div>
         </div>
@@ -225,9 +226,9 @@ function EventForm({ state, calendars, reminderDefault, onClose }: {
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
             <label className="label" htmlFor="ev-rem">Erinnerung</label>
-            <select id="ev-rem" value={reminder} onChange={e => setReminder(e.target.value)} className="input">
+            <Select id="ev-rem" value={reminder} onChange={e => setReminder(e.target.value)} className="input">
               {REMINDERS.map(r => <option key={r.v} value={r.v}>{r.l}</option>)}
-            </select>
+            </Select>
             {reminder === 'custom' && (
               <input type="number" min={0} max={10080} value={customReminder} onChange={e => setCustomReminder(e.target.value)} className="input mt-2" aria-label="Minuten vorher" />
             )}
@@ -236,18 +237,18 @@ function EventForm({ state, calendars, reminderDefault, onClose }: {
           {(!editing || scope === 'series') && !external && (
             <div>
               <label className="label" htmlFor="ev-rep">Wiederholung</label>
-              <select id="ev-rep" name="repeat" value={repeat} onChange={e => setRepeat(e.target.value)} className="input">
+              <Select id="ev-rep" name="repeat" value={repeat} onChange={e => setRepeat(e.target.value)} className="input">
                 {RECURRENCE_PRESETS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-              </select>
+              </Select>
             </div>
           )}
         </div>
         {repeat === 'custom' && (!editing || scope === 'series') && (
           <div className="flex items-center gap-2 text-sm">
             Alle <input name="repeatInterval" type="number" min={1} max={99} defaultValue={d?.repeatInterval ?? 1} className="input w-20" aria-label="Intervall" />
-            <select name="repeatUnit" defaultValue={d?.repeatUnit ?? 'weekly'} className="input w-36" aria-label="Einheit">
+            <Select name="repeatUnit" defaultValue={d?.repeatUnit ?? 'weekly'} className="input w-36" aria-label="Einheit">
               <option value="daily">Tage</option><option value="weekly">Wochen</option><option value="monthly">Monate</option><option value="yearly">Jahre</option>
-            </select>
+            </Select>
           </div>
         )}
         {repeat !== 'none' && (!editing || scope === 'series') && (

@@ -9,6 +9,7 @@ import { GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Gender, type Prefs, ty
 import { Mascot, type MascotName } from '@/components/Mascot';
 import { toastResult } from '@/components/Toaster';
 import { FormMessage, SubmitButton, Toggle } from '@/components/ui';
+import { Select } from '@/components/Select';
 
 const ZONES = ['Europe/Vienna', 'Europe/Berlin', 'Europe/Zurich', 'Europe/Rome', 'Europe/London', 'Europe/Paris', 'Europe/Madrid', 'Europe/Warsaw', 'America/New_York', 'Asia/Tokyo'];
 
@@ -24,22 +25,24 @@ export function ProfileForm({ name, userType, gender, timezone, mascot }: { name
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <label className="label" htmlFor="p-type">Benutzerart</label>
-          <select id="p-type" name="userType" defaultValue={userType ?? 'sonstiges'} className="input">
+          <Select id="p-type" name="userType" defaultValue={userType ?? 'sonstiges'} className="input">
             {(Object.keys(USER_TYPE_LABELS) as UserType[]).map(t => <option key={t} value={t}>{USER_TYPE_LABELS[t]}</option>)}
-          </select>
+          </Select>
+        </div>
+        <div>
+          <label className="label" htmlFor="p-gender">Geschlecht</label>
+          <Select id="p-gender" name="gender" value={g ?? ''} onChange={e => setG(e.target.value as Gender)}>
+            <option value="" disabled>Bitte wählen</option>
+            {(Object.keys(GENDER_LABELS) as Gender[]).map(x => <option key={x} value={x}>{GENDER_LABELS[x]}</option>)}
+          </Select>
         </div>
         <div>
           <label className="label" htmlFor="p-tz">Zeitzone</label>
-          <select id="p-tz" name="timezone" defaultValue={timezone} className="input">
+          <Select id="p-tz" name="timezone" defaultValue={timezone} className="input">
             {[...new Set([timezone, ...ZONES])].map(z => <option key={z} value={z}>{z}</option>)}
-          </select>
+          </Select>
         </div>
       </div>
-      <fieldset>
-        <legend className="label">Geschlecht</legend>
-        <input type="hidden" name="gender" value={g ?? ''} />
-        <GenderPicker value={g} onChange={setG} />
-      </fieldset>
       <fieldset>
         <legend className="label">Dein Begleiter</legend>
         <input type="hidden" name="mascot" value={shown} />
@@ -109,7 +112,7 @@ export function SubjectsForm({ subjects }: { subjects: Subject[] }) {
       </div>
       <form action={action} className="flex flex-wrap gap-2" key={state?.ok ? state.message : 'subj'}>
         <input name="subject" required maxLength={40} placeholder="Fach" className="input w-40 flex-1" aria-label="Fach" />
-        <select name="difficulty" defaultValue="2" className="input w-32" aria-label="Schwierigkeit"><option value="1">Leicht</option><option value="2">Mittel</option><option value="3">Schwer</option></select>
+        <Select name="difficulty" defaultValue="2" className="input w-32" aria-label="Schwierigkeit"><option value="1">Leicht</option><option value="2">Mittel</option><option value="3">Schwer</option></Select>
         <SubmitButton className="btn-outline">Hinzufügen</SubmitButton>
       </form>
       <FormMessage state={state && !state.ok ? state : null} />
@@ -197,16 +200,3 @@ export function DangerZone() {
   );
 }
 
-/** Segmented m/w/d control – same look in onboarding and profile. */
-export function GenderPicker({ value, onChange }: { value: Gender | null | ''; onChange: (g: Gender) => void }) {
-  return (
-    <div className="grid grid-cols-3 gap-1 rounded-2xl bg-paper p-1" role="radiogroup" aria-label="Geschlecht">
-      {(Object.keys(GENDER_LABELS) as Gender[]).map(x => (
-        <button type="button" key={x} role="radio" aria-checked={value === x} onClick={() => onChange(x)}
-          className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${value === x ? 'bg-white text-leaf-dark shadow-sm ring-2 ring-leaf' : 'text-ink-soft hover:bg-white/70 hover:text-ink'}`}>
-          {GENDER_LABELS[x]}
-        </button>
-      ))}
-    </div>
-  );
-}

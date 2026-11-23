@@ -11,6 +11,7 @@ import { CATEGORIES, CATEGORY_META, type ConnectionConfig, type TimetableEntry }
 import type { TimetableBreak } from '@/lib/repo';
 import { toast, toastResult } from '@/components/Toaster';
 import { FormMessage, SubmitButton } from '@/components/ui';
+import { Select } from '@/components/Select';
 
 interface Conn { status: string; lastSyncAt: string | null; lastError: string | null; config: ConnectionConfig }
 
@@ -107,10 +108,10 @@ export function ProviderCard({ provider, configured, conn, tz }: { provider: 'go
             </div>
             <div>
               <label className="label" htmlFor={`${provider}-export`}>CLOQI-Termine übertragen nach</label>
-              <select id={`${provider}-export`} name="exportCalendarId" defaultValue={conn.config.exportCalendarId ?? ''} className="input">
+              <Select id={`${provider}-export`} name="exportCalendarId" defaultValue={conn.config.exportCalendarId ?? ''} className="input">
                 <option value="">Nicht übertragen</option>
                 {cals.filter(c => c.writable).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              </Select>
             </div>
             <CategoryPicker name="exportCategories" selected={conn.config.exportCategories ?? []} label="Welche Kategorien werden übertragen?" />
             <FormMessage state={state} />
@@ -239,10 +240,10 @@ export function WebUntisCard({ conn, tz }: { conn: Conn | null; tz: string }) {
             {isPublic.classes.length > 0 && (
               <>
                 {!isPublic.studentPublic && <p className="text-xs text-ink-soft">Dein persönlicher Stundenplan ist nicht öffentlich – wähle deine Klasse.</p>}
-                <select aria-label="Klasse" className="input" value={target === 'student' ? '' : target} onChange={e => setTarget(e.target.value)}>
+                <Select aria-label="Klasse" className="input" value={target === 'student' ? '' : target} onChange={e => setTarget(e.target.value)}>
                   <option value="" disabled>Klasse wählen …</option>
                   {isPublic.classes.map(c => <option key={c.id} value={String(c.id)}>{c.name}{c.longName && c.longName !== c.name ? ` – ${c.longName}` : ''}</option>)}
-                </select>
+                </Select>
               </>
             )}
           </div>
@@ -304,9 +305,9 @@ export function ImportCard() {
         <input name="file" type="file" accept=".ics,.csv,text/calendar,text/csv" required className="input file:mr-3 file:rounded-lg file:border-0 file:bg-leaf-soft file:px-3 file:py-1.5 file:font-semibold file:text-leaf-dark" />
         <div>
           <label className="label" htmlFor="imp-cat">Kategorie für ICS-Termine</label>
-          <select id="imp-cat" name="category" defaultValue="schule" className="input">
+          <Select id="imp-cat" name="category" defaultValue="schule" className="input">
             {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_META[c].label}</option>)}
-          </select>
+          </Select>
         </div>
         <FormMessage state={state} />
         <SubmitButton pendingText="Importiere …">Importieren</SubmitButton>
@@ -332,9 +333,9 @@ export function ManualTimetable({ entries, breaks }: { entries: TimetableEntry[]
         <div><label className="label" htmlFor="l-subject">Fach</label><input id="l-subject" name="subject" required maxLength={60} className="input" /></div>
         <div>
           <label className="label" htmlFor="l-day">Wochentag</label>
-          <select id="l-day" name="weekday" value={day} onChange={e => setDay(Number(e.target.value))} className="input">
+          <Select id="l-day" name="weekday" value={day} onChange={e => setDay(Number(e.target.value))} className="input">
             {WEEKDAYS_DE.map((w, i) => <option key={w} value={i + 1}>{w}</option>)}
-          </select>
+          </Select>
         </div>
         <div><label className="label" htmlFor="l-start">Beginn</label><input id="l-start" name="start" type="time" required defaultValue="08:00" className="input" /></div>
         <div><label className="label" htmlFor="l-end">Ende</label><input id="l-end" name="end" type="time" required defaultValue="08:50" className="input" /></div>

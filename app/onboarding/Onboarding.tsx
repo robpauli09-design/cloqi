@@ -5,7 +5,7 @@ import { ArrowLeft, ArrowRight, Briefcase, CalendarDays, Dumbbell, GraduationCap
 import { completeOnboarding } from '@/app/actions/settings';
 import { Mascot, type MascotName } from '@/components/Mascot';
 import { mascotFor, type Gender } from '@/lib/types';
-import { GenderPicker } from '@/app/(app)/profile/ProfileForms';
+import { GenderPicker } from '@/components/GenderPicker';
 import { Logo } from '@/components/Logo';
 import { SubmitButton } from '@/components/ui';
 

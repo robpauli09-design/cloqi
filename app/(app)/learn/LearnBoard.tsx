@@ -12,6 +12,7 @@ import { StudyCheck } from '@/components/ItemActions';
 import { Mascot, type MascotName } from '@/components/Mascot';
 import { toast, toastResult } from '@/components/Toaster';
 import { FormMessage, SubmitButton } from '@/components/ui';
+import { Select } from '@/components/Select';
 
 const DIFF = ['', 'Leicht', 'Mittel', 'Schwer'];
 
@@ -160,15 +161,15 @@ function AddTaskForm({ subjects, onPlanned }: { subjects: Subject[]; onPlanned: 
         </div>
         <div>
           <label className="label" htmlFor="t-kind">Art</label>
-          <select id="t-kind" name="kind" className="input" defaultValue="test">
+          <Select id="t-kind" name="kind" className="input" defaultValue="test">
             {(Object.keys(TASK_KIND_LABELS) as TaskKind[]).map(k => <option key={k} value={k}>{TASK_KIND_LABELS[k]}</option>)}
-          </select>
+          </Select>
         </div>
         <div><label className="label" htmlFor="t-date">Datum</label><input id="t-date" name="date" type="date" required className="input" /></div>
         <div><label className="label" htmlFor="t-time">Uhrzeit</label><input id="t-time" name="time" type="time" defaultValue="08:00" className="input" /></div>
         <div>
           <label className="label" htmlFor="t-diff">Schwierigkeit</label>
-          <select id="t-diff" name="difficulty" defaultValue="2" className="input"><option value="1">Leicht</option><option value="2">Mittel</option><option value="3">Schwer</option></select>
+          <Select id="t-diff" name="difficulty" defaultValue="2" className="input"><option value="1">Leicht</option><option value="2">Mittel</option><option value="3">Schwer</option></Select>
         </div>
         <div>
           <label className="label" htmlFor="t-min">Lernaufwand in Minuten (optional)</label>
