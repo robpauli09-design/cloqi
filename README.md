@@ -26,6 +26,7 @@ Lokal: `npm install`, `.env.local` aus `.env.example` anlegen (gleiche Werte, `A
 | Variable | Pflicht | Inhalt |
 |---|---|---|
 | `DATABASE_URL` | ✅ | Supabase Transaction-Pooler-URL (Port 6543) |
+| `DATABASE_CA_CERT` | empfohlen | Supabase-SSL-Zertifikat (Project Settings → Database → SSL Configuration → Download), kompletter PEM-Inhalt – damit wird die Identität der Datenbank geprüft |
 | `CLOQI_ENCRYPTION_KEY` | ✅ | 32 Byte base64 – `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"`. Nie mehr ändern, sobald echte Daten existieren. |
 | `APP_URL` | ✅ | z. B. `https://cloqi.vercel.app` (ohne `/` am Ende) |
 | `AI_API_KEY` | für CLOQI AI | Schlüssel des Sprachmodell-Anbieters |

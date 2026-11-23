@@ -3,6 +3,7 @@
   "framework": "nextjs",
   "installCommand": "npm ci",
   "buildCommand": "next build",
+  "outputDirectory": ".next",
   "regions": ["fra1"],
   "crons": [{ "path": "/api/cron/sync", "schedule": "0 5 * * *" }]
 }

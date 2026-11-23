@@ -39,10 +39,18 @@ async function open(): Promise<Db> {
   if (!url) throw new Error('DATABASE_URL fehlt (Supabase → Project Settings → Database → Connection string).');
   const { default: postgres } = await import('postgres');
   const local = /@(localhost|127\.0\.0\.1)[:/]/.test(url);
+  // TLS: with DATABASE_CA_CERT (Supabase → Project Settings → Database → SSL certificate, PEM content)
+  // the server certificate is fully verified. Without it the connection is still encrypted,
+  // but the server identity is not checked – set the CA for production.
+  const ca = process.env.DATABASE_CA_CERT?.replace(/\\n/g, '\n');
+  if (!local && !ca && process.env.NODE_ENV === 'production') {
+    console.warn('[cloqi] DATABASE_CA_CERT fehlt: Datenbankverbindung ist verschlüsselt, das Server-Zertifikat wird aber nicht geprüft.');
+  }
+  const ssl = local ? false : ca ? { rejectUnauthorized: true, ca } : 'require';
   const sql = postgres(url, {
     prepare: false,           // required for Supabase's transaction pooler (port 6543) on serverless hosts
     max: Number(process.env.DATABASE_POOL_MAX ?? 3), idle_timeout: 20, connect_timeout: 15,
-    ssl: local ? false : 'require',
+    ssl,
     types: {
       instant: { to: 1184, from: [1184, 1114], serialize: (x: unknown) => String(x), parse: isoInstant },
       day: { to: 1082, from: [1082], serialize: (x: unknown) => String(x), parse: (x: string) => x },
