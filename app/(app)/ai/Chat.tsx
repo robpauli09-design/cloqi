@@ -61,7 +61,7 @@ export function Chat({ mascot, name, aiEnabled, history }: { mascot: MascotName;
       <header className="flex flex-wrap items-center gap-4">
         <Mascot name={mascot} variant="bust" size={92} />
         <div className="min-w-0 flex-1">
-          <p className="eyebrow !text-ai">CLOQI AI {aiEnabled ? '' : '· Basis-Modus'}</p>
+          <p className="eyebrow !text-leaf-dark">CLOQI AI {aiEnabled ? '' : '· Basis-Modus'}</p>
           <h1 className="h1">Frag CLOQI</h1>
           <p className="muted">Ich helfe dir, deinen Alltag einfacher zu organisieren – und merke mir, was dir wichtig ist.</p>
         </div>
@@ -81,7 +81,7 @@ export function Chat({ mascot, name, aiEnabled, history }: { mascot: MascotName;
             <p className="font-semibold">Hey {name || 'du'}! Erzähl mir, was ansteht – tippen oder sprechen. Ich trage alles ein und plane drumherum.</p>
             <div className="mt-4 flex flex-wrap gap-2">
               {EXAMPLES.map(e => (
-                <button key={e} onClick={() => send(e)} className="chip bg-ai-soft px-3 py-1.5 text-left text-sm text-ai hover:bg-ai hover:text-white">{e}</button>
+                <button key={e} onClick={() => send(e)} className="chip border border-line bg-white px-3 py-1.5 text-left text-sm font-medium text-leaf-deep transition hover:border-leaf hover:bg-leaf-soft">{e}</button>
               ))}
             </div>
             <p className="mt-4 text-xs text-ink-faint">

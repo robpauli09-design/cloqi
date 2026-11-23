@@ -8,7 +8,7 @@ import { Mascot } from '@/components/Mascot';
 import { T } from '@/components/ui';
 import { colors, font, radius, shadow } from '@/theme';
 
-// Same examples as the website – green, purple only as a small accent (spec: AI purple used sparingly).
+// Same examples as the website – no purple on the AI page (user decision 2026-11-23).
 const EXAMPLES = [
   'Ich habe nächsten Donnerstag einen Mathe-Test, Kapitel 4 und 5.',
   'Ich trainiere Dienstag und Donnerstag von 17 bis 18:30 Fußball.',
@@ -58,7 +58,7 @@ export default function Ai() {
         <View style={st.head}>
           <Mascot name={user?.mascot} variant="head" size={42} />
           <View style={{ flex: 1 }}>
-            <T variant="eyebrow" style={{ color: colors.ai }}>CLOQI AI</T>
+            <T variant="eyebrow" style={{ color: colors.leafDark }}>CLOQI AI</T>
             <T variant="h2">Frag CLOQI</T>
           </View>
           {messages.length > 0 && <Pressable onPress={newChat} hitSlop={10}><T style={{ color: colors.leafDark, fontFamily: font.bold }}>Neuer Chat</T></Pressable>}
