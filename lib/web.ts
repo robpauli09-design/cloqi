@@ -74,11 +74,25 @@ function getOnce(u: URL): Promise<Got> {
   });
 }
 
-async function fetchPublic(raw: string): Promise<{ url: string; type: string; body: string }> {
+/** "de.m.wikipedia.org" → "wikipedia.org", "www.bmbwf.gv.at" → "bmbwf.gv.at" (registrable domain, good enough for our sites). */
+function site(host: string): string {
+  const p = host.toLowerCase().split('.');
+  const two = ['gv', 'co', 'ac', 'or', 'com', 'org', 'net', 'edu', 'gov'].includes(p[p.length - 2]) && p.length > 2;
+  return p.slice(two ? -3 : -2).join('.');
+}
+
+async function fetchPublic(raw: string, opts: { anyRedirect?: boolean } = {}): Promise<{ url: string; type: string; body: string }> {
   let url = checkUrl(raw);
+  const home = site(url.hostname);
   for (let hop = 0; hop < 4; hop++) {
     const r = await getOnce(url);
-    if (r.location) { url = checkUrl(new URL(r.location, url).toString()); continue; } // every redirect is checked (and pinned) again
+    if (r.location) {
+      url = checkUrl(new URL(r.location, url).toString()); // every redirect is checked (and pinned) again
+      // pages CLOQI opens on its own may not redirect to another website (open redirects could leak data);
+      // links the user sent themselves (e.g. short links) may
+      if (!opts.anyRedirect && site(url.hostname) !== home) throw new Error('Die Seite leitet auf eine andere Website weiter – die öffne ich nicht von mir aus. Schick mir den Link direkt.');
+      continue;
+    }
     if (r.status < 200 || r.status >= 300) throw new Error(`Die Seite antwortet mit Fehler ${r.status}.`);
     if (!/text\/html|text\/plain|application\/json|application\/xhtml/.test(r.type)) {
       throw new Error(r.type.includes('pdf') ? 'PDFs aus dem Internet kann ich noch nicht lesen – lade das PDF im Chat hoch.' : 'Diese Art von Datei kann ich nicht lesen.');
@@ -89,8 +103,8 @@ async function fetchPublic(raw: string): Promise<{ url: string; type: string; bo
 }
 
 /** Opens a public page and returns part `part` of its readable text. */
-export async function readWebPage(raw: string, part = 1) {
-  const page = await fetchPublic(raw);
+export async function readWebPage(raw: string, part = 1, opts: { anyRedirect?: boolean } = {}) {
+  const page = await fetchPublic(raw, opts);
   const title = page.type.includes('html') ? (page.body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? '').trim() : '';
   // keep the main content if the page marks it; drop menus, headers, footers
   const main = page.body.match(/<(main|article)[\s\S]*?<\/\1>/i)?.[0] ?? page.body;
@@ -135,12 +149,12 @@ const LEARNING_SITES = [
  * Allowed: URLs found by web_suchen in this turn, URLs the user wrote in this message, and known learning sites
  * (without query string/fragment, so nothing can be appended).
  */
-export function allowedWebUrl(raw: string, ctx: { userMessage: string; found: Set<string> }): string {
+export function allowedWebUrl(raw: string, ctx: { userMessage: string; found: Set<string> }): { url: string; fromUser: boolean } {
   const u = checkUrl(raw);
   const exact = u.toString();
-  if (ctx.found.has(exact) || ctx.found.has(raw.trim())) return exact;
-  if (ctx.userMessage.includes(raw.trim()) || ctx.userMessage.includes(exact)) return exact;
+  if (ctx.found.has(exact) || ctx.found.has(raw.trim())) return { url: exact, fromUser: false };
+  if (ctx.userMessage.includes(raw.trim()) || ctx.userMessage.includes(exact)) return { url: exact, fromUser: true };
   const host = u.hostname.toLowerCase();
-  if (LEARNING_SITES.some(d => host === d || host.endsWith(`.${d}`))) { u.search = ''; u.hash = ''; return u.toString(); }
+  if (LEARNING_SITES.some(d => host === d || host.endsWith(`.${d}`))) { u.search = ''; u.hash = ''; return { url: u.toString(), fromUser: false }; }
   throw new Error('Diese Seite öffne ich nicht von mir aus. Ich öffne Treffer aus web_suchen, Adressen aus deiner Nachricht und bekannte Lernseiten.');
 }
