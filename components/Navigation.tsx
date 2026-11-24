@@ -9,10 +9,10 @@ import { Logo } from './Logo';
 import { Mascot, type MascotName } from './Mascot';
 import { SIDEBAR_COOKIE } from '@/lib/sidebar';
 
-// CLOQI AI first – it is the heart of the app
+// CLOQI AI right after Home – it is the heart of the app
 const NAV = [
-  { href: '/ai', label: 'CLOQI AI', icon: MessageCircleHeart },
   { href: '/dashboard', label: 'Home', icon: Home },
+  { href: '/ai', label: 'CLOQI AI', icon: MessageCircleHeart },
   { href: '/calendar', label: 'Kalender', icon: CalendarDays },
   { href: '/learn', label: 'Learn', icon: BookOpen },
   { href: '/life', label: 'Life', icon: Sun },
