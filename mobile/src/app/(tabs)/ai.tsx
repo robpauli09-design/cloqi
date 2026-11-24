@@ -260,19 +260,7 @@ export default function Ai() {
           }
           renderItem={({ item }) => (
             <View style={[st.bubble, item.role === 'user' ? st.mine : st.theirs, item.failed && { backgroundColor: colors.dangerSoft }]}>
-              {!!item.steps?.length && (
-                <View style={[{ gap: 3 }, item.content ? { marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.line } : { marginBottom: 4 }]}>
-                  {item.steps.map((stp, si) => {
-                    const working = item.streaming && !item.content && si === item.steps!.length - 1 && item.status === stp;
-                    return (
-                      <View key={si} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                        {working ? <ActivityIndicator size="small" color={colors.leaf} /> : <Ionicons name="checkmark" size={14} color={colors.leafDark} />}
-                        <T variant="small">{working ? stp : stp.replace(/ …$/, '')}</T>
-                      </View>
-                    );
-                  })}
-                </View>
-              )}
+              {!!item.steps?.length && <Steps steps={item.steps} live={!!item.streaming && !item.content} status={item.status} />}
               {item.streaming && !item.content
                 ? (item.status === 'Denkt nach …' || !item.steps?.length) ? <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}><ActivityIndicator color={colors.leaf} /><T variant="muted">{item.status ?? 'Denkt nach …'}</T></View> : null
                 : item.role === 'user'
@@ -427,3 +415,25 @@ const st = StyleSheet.create({
   option: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 14, paddingVertical: 15, borderRadius: radius.md },
   thread: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12, borderRadius: radius.md },
 });
+
+/** Work steps: visible while CLOQI works, folded into "N Schritte" once the answer is there (tap to open). */
+function Steps({ steps, live, status }: { steps: string[]; live: boolean; status?: string }) {
+  const [open, setOpen] = useState(false);
+  const row = (stp: string, si: number, working = false) => (
+    <View key={si} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      {working ? <ActivityIndicator size="small" color={colors.leaf} /> : <Ionicons name="checkmark" size={14} color={colors.leafDark} />}
+      <T variant="small">{working ? stp : stp.replace(/ …$/, '')}</T>
+    </View>
+  );
+  if (live) return <View style={{ gap: 3, marginBottom: 4 }}>{steps.map((s, i) => row(s, i, i === steps.length - 1 && status === s))}</View>;
+  return (
+    <View style={{ gap: 3, marginBottom: 8, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: colors.line }}>
+      <Pressable onPress={() => setOpen(o => !o)} hitSlop={8} accessibilityRole="button" style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Ionicons name="checkmark" size={14} color={colors.leafDark} />
+        <T variant="small">{steps.length} {steps.length === 1 ? 'Schritt' : 'Schritte'}</T>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={13} color={colors.inkFaint} />
+      </Pressable>
+      {open && steps.map((s, i) => row(s, i))}
+    </View>
+  );
+}

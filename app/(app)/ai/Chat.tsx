@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
-  ArrowUp, BookOpenText, CalendarPlus, Camera, Check, Clock3, FileText, History, ImageIcon, Loader2, Mic, Paperclip, Plus,
+  ArrowUp, BookOpenText, CalendarPlus, Camera, Check, ChevronDown, Clock3, FileText, History, ImageIcon, Loader2, Mic, Paperclip, Plus,
   Sparkles, SquarePen, Sun, Trash2, X,
 } from 'lucide-react';
 import { askCloqi, confirmProposal, type Proposal } from '@/app/actions/assistant';
@@ -319,8 +319,8 @@ export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotN
           <div key={m.id} className="flex items-end gap-2">
             <MascotAvatar name={mascot} size={32} />
             <div className={`max-w-[85%] animate-rise rounded-2xl rounded-bl-md border px-4 py-3 text-sm shadow-card ${m.error ? 'border-danger/30 bg-danger-soft/60' : 'border-line bg-white'}`}>
-              {m.steps && m.steps.length > 0 && (
-                <ul className={`space-y-0.5 text-xs text-ink-faint ${m.text ? 'mb-2 border-b border-line pb-2' : 'mb-1'}`}>
+              {m.steps && m.steps.length > 0 && (m.streaming && !m.text ? (
+                <ul className="mb-1 space-y-0.5 text-xs text-ink-faint">
                   {m.steps.map((st, si) => {
                     const working = m.streaming && !m.text && si === m.steps!.length - 1 && m.status === st;
                     return (
@@ -331,7 +331,19 @@ export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotN
                     );
                   })}
                 </ul>
-              )}
+              ) : (
+                // once the answer is there, the work steps fold away – tap to see them again
+                <details className="group mb-2 border-b border-line pb-2 text-xs text-ink-faint">
+                  <summary className="flex cursor-pointer list-none items-center gap-1.5 hover:text-ink-soft">
+                    <Check size={12} className="text-leaf-dark" />
+                    {m.steps.length} {m.steps.length === 1 ? 'Schritt' : 'Schritte'}
+                    <ChevronDown size={12} className="transition group-open:rotate-180" />
+                  </summary>
+                  <ul className="mt-1 space-y-0.5 pl-0.5">
+                    {m.steps.map((st, si) => <li key={si} className="flex items-center gap-1.5"><Check size={12} className="text-leaf-dark" />{st.replace(/ …$/, '')}</li>)}
+                  </ul>
+                </details>
+              ))}
               {m.streaming && !m.text
                 ? (m.status === 'Denkt nach …' || !m.steps?.length) && <p className="flex items-center gap-2 text-xs text-ink-soft"><Loader2 size={14} className="animate-spin text-leaf" />{m.status ?? 'Denkt nach …'}</p>
                 : <>
