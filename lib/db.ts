@@ -60,6 +60,31 @@ const UPGRADES = [
   'CREATE INDEX IF NOT EXISTS ai_usage_user_idx ON ai_usage (user_id, kind, created_at DESC)',
   'ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY',
   "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.ai_usage FROM anon, authenticated; END IF; END $$",
+  // Sport: workout templates (can be scheduled as a weekly calendar series) and logged workouts
+  `CREATE TABLE IF NOT EXISTS workout_templates (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     name text NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+     exercises jsonb NOT NULL DEFAULT '[]'::jsonb,
+     schedule jsonb,
+     event_id uuid REFERENCES events(id) ON DELETE SET NULL,
+     created_at timestamptz NOT NULL DEFAULT now(),
+     updated_at timestamptz NOT NULL DEFAULT now())`,
+  `CREATE TABLE IF NOT EXISTS workouts (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     template_id uuid REFERENCES workout_templates(id) ON DELETE SET NULL,
+     name text NOT NULL,
+     started_at timestamptz NOT NULL DEFAULT now(),
+     finished_at timestamptz,
+     exercises jsonb NOT NULL DEFAULT '[]'::jsonb,
+     note text)`,
+  'CREATE INDEX IF NOT EXISTS workouts_user_idx ON workouts (user_id, finished_at DESC)',
+  'ALTER TABLE workout_templates ENABLE ROW LEVEL SECURITY',
+  'ALTER TABLE workouts ENABLE ROW LEVEL SECURITY',
+  "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.workout_templates, public.workouts FROM anon, authenticated; END IF; END $$",
+  // which areas (tabs) the user wants: "learn,life,sport,vault" – null = the defaults
+  'ALTER TABLE profiles ADD COLUMN IF NOT EXISTS nav_tabs text',
   // weekly series on chosen weekdays ("1,3,5" = Mo, Mi, Fr)
   'ALTER TABLE events ADD COLUMN IF NOT EXISTS recurrence_days text',
   // Microsoft Schule (Teams & OneNote, read-only)

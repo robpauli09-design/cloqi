@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { BookOpen, BookOpenText, CalendarDays, Flower2, Home, Link2, MessageCircleHeart, PanelLeftClose, PanelLeftOpen, Sun, UserRound } from 'lucide-react';
+import { BookOpen, BookOpenText, CalendarDays, Dumbbell, Flower2, Home, Link2, MessageCircleHeart, PanelLeftClose, PanelLeftOpen, Sun, UserRound } from 'lucide-react';
+import type { OptionalTab } from '@/lib/types';
 import { AccountMenu } from './AccountMenu';
 import { Logo } from './Logo';
 import { Mascot, type MascotName } from './Mascot';
@@ -16,18 +17,23 @@ const NAV = [
   { href: '/calendar', label: 'Kalender', icon: CalendarDays },
   { href: '/learn', label: 'Learn', icon: BookOpen },
   { href: '/life', label: 'Life', icon: Sun },
+  { href: '/sport', label: 'Sport', icon: Dumbbell },
   { href: '/vault', label: 'Wissen', icon: BookOpenText },
   { href: '/profile', label: 'Profil', icon: UserRound },
 ];
 const CYCLE = { href: '/cycle', label: 'Cycle', icon: Flower2 };
 
+/** Which optional area a link belongs to (switched on/off in Profil → Bereiche). */
+const TAB_OF: Record<string, OptionalTab> = { '/learn': 'learn', '/life': 'life', '/sport': 'sport', '/vault': 'vault' };
+const shown = (href: string, tabs: OptionalTab[]) => !TAB_OF[href] || tabs.includes(TAB_OF[href]);
+
 /** Desktop: the profile lives in the account menu at the bottom left, not in the list. */
-function useItems(cycle: boolean) {
-  const main = NAV.filter(i => i.href !== '/profile');
+function useItems(cycle: boolean, tabs: OptionalTab[]) {
+  const main = NAV.filter(i => i.href !== '/profile' && shown(i.href, tabs));
   return cycle ? [...main, CYCLE] : main;
 }
 
-type NavProps = { name: string; email: string; mascot: MascotName; cycle: boolean };
+type NavProps = { name: string; email: string; mascot: MascotName; cycle: boolean; tabs: OptionalTab[] };
 
 /** Desktop frame: the sidebar can be collapsed to an icon rail (like ChatGPT/Claude); remembered in a cookie. */
 export function AppFrame({ nav, collapsed: initial, children }: { nav: NavProps; collapsed: boolean; children: React.ReactNode }) {
@@ -51,9 +57,9 @@ export function AppFrame({ nav, collapsed: initial, children }: { nav: NavProps;
   );
 }
 
-function Sidebar({ name, email, mascot, cycle, collapsed, onToggle }: NavProps & { collapsed: boolean; onToggle(): void }) {
+function Sidebar({ name, email, mascot, cycle, tabs, collapsed, onToggle }: NavProps & { collapsed: boolean; onToggle(): void }) {
   const path = usePathname();
-  const items = useItems(cycle);
+  const items = useItems(cycle, tabs);
   const toggleLabel = collapsed ? 'Seitenleiste ausklappen' : 'Seitenleiste einklappen';
   const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
   const toggleBtn = (
@@ -102,7 +108,7 @@ function Sidebar({ name, email, mascot, cycle, collapsed, onToggle }: NavProps &
  * Phone: three tabs only – Kalender (incl. Heute, Lernen, Life), CLOQI AI in the middle, Profil
  * (incl. Wissen, Kalender verbinden, Cycle). Same structure as the Expo app.
  */
-const CAL_GROUP = ['/dashboard', '/calendar', '/learn', '/life'];
+const CAL_GROUP = ['/dashboard', '/calendar', '/learn', '/life', '/sport'];
 const PROFILE_GROUP = ['/profile', '/connect', '/vault', '/cycle'];
 const inGroup = (path: string, group: string[]) => group.some(h => path === h || path.startsWith(`${h}/`));
 
@@ -138,16 +144,17 @@ const SECTIONS = [
   { href: '/calendar', label: 'Kalender' },
   { href: '/learn', label: 'Lernen' },
   { href: '/life', label: 'Life' },
+  { href: '/sport', label: 'Sport' },
 ];
 
-/** Phone only: switch between the parts of the Kalender tab. */
-export function MobileSectionTabs() {
+/** Phone only: switch between the parts of the Kalender tab (only the areas the user switched on). */
+export function MobileSectionTabs({ tabs }: { tabs: OptionalTab[] }) {
   const path = usePathname();
   if (!inGroup(path, CAL_GROUP)) return null;
   return (
     <div className="-mx-4 mb-4 overflow-x-auto px-4 lg:hidden">
       <div className="flex w-max min-w-full gap-1 rounded-2xl bg-white p-1 shadow-sm ring-1 ring-line">
-        {SECTIONS.map(s => {
+        {SECTIONS.filter(s => shown(s.href, tabs)).map(s => {
           const active = path === s.href || path.startsWith(`${s.href}/`);
           return (
             <Link key={s.href} href={s.href} aria-current={active ? 'page' : undefined}

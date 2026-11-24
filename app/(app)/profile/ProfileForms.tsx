@@ -4,8 +4,8 @@ import { useActionState, useEffect, useState, useTransition } from 'react';
 import Link from 'next/link';
 import { Bell, Download, LogOut, ShieldCheck, Trash2, X } from 'lucide-react';
 import { logout } from '@/app/actions/auth';
-import { addSubject, deleteAccount, removeSubject, saveProfile, savePrefs, setCycleInCalendar, setCycleModule } from '@/app/actions/settings';
-import { GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Gender, type Prefs, type Subject, type UserType } from '@/lib/types';
+import { addSubject, deleteAccount, removeSubject, saveProfile, savePrefs, saveTabs, setCycleInCalendar, setCycleModule } from '@/app/actions/settings';
+import { GENDER_LABELS, mascotFor, OPTIONAL_TABS, TAB_INFO, USER_TYPE_LABELS, type Gender, type OptionalTab, type Prefs, type Subject, type UserType } from '@/lib/types';
 import { Mascot, type MascotName } from '@/components/Mascot';
 import { toastResult } from '@/components/Toaster';
 import { FormMessage, SubmitButton, Toggle } from '@/components/ui';
@@ -200,3 +200,27 @@ export function DangerZone() {
   );
 }
 
+/** Bereiche: switch areas on/off – nobody has to use everything. */
+export function TabsSettings({ tabs }: { tabs: OptionalTab[] }) {
+  const [on, setOn] = useState<OptionalTab[]>(tabs);
+  const [pending, start] = useTransition();
+  const flip = (t: OptionalTab) => {
+    const next = on.includes(t) ? on.filter(x => x !== t) : [...on, t];
+    setOn(next);
+    start(async () => toastResult(await saveTabs(next)));
+  };
+  return (
+    <section id="bereiche" className="card card-pad scroll-mt-6">
+      <h2 className="h2">Bereiche</h2>
+      <p className="muted mt-1">Was du nicht brauchst, blendest du aus. Home, CLOQI AI und Kalender sind immer da.</p>
+      <ul className="mt-4 divide-y divide-line">
+        {OPTIONAL_TABS.map(t => (
+          <li key={t} className="flex items-center gap-3 py-3">
+            <span className="min-w-0 flex-1"><span className="block font-semibold">{TAB_INFO[t].label}</span><span className="block text-xs text-ink-soft">{TAB_INFO[t].hint}</span></span>
+            <Toggle on={on.includes(t)} label={TAB_INFO[t].label} disabled={pending} onChange={() => flip(t)} />
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}

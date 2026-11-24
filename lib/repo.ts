@@ -3,8 +3,7 @@ import { db, newId, nowIso, type Db, type Param, type Row } from './db';
 import { decrypt, encrypt } from './crypto';
 import {
   DEFAULT_PREFS, type CalendarConnection, type CalendarEvent, type CalendarKind, type Category, type CycleEntry, type Prefs, type Provider,
-  type StudyBlock, type Subject, type Suggestion, type Task, type TimetableEntry, type User, type UserCalendar,
-} from './types';
+  type StudyBlock, type Subject, type Suggestion, type Task, type TimetableEntry, type User, type UserCalendar, parseTabs, DEFAULT_TABS } from './types';
 
 const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
 /** jsonb arrives parsed; tolerate strings too. */
@@ -26,7 +25,7 @@ const run = async (sql: string, p: Param[] = []) => (await db()).run(sql, p);
 const USER_SELECT = `
   SELECT u.id, u.email, u.password_hash, u.created_at,
          p.display_name, p.user_type, p.gender, p.timezone, p.mascot, p.life_areas, p.onboarded_at,
-         p.cycle_enabled, p.cycle_in_calendar,
+         p.cycle_enabled, p.cycle_in_calendar, p.nav_tabs,
          s.weekday_start, s.weekday_end, s.weekend_start, s.weekend_end, s.study_on_sunday, s.max_minutes_per_day,
          s.max_block_minutes, s.break_minutes, s.daily_goal_minutes, s.default_reminder_minutes
   FROM users u JOIN profiles p ON p.user_id = u.id JOIN study_settings s ON s.user_id = u.id`;
@@ -41,7 +40,7 @@ async function toUser(r: Row): Promise<User> {
     maxStudyPerDay: Number(r.max_minutes_per_day), blockMax: Number(r.max_block_minutes), breakMin: Number(r.break_minutes),
     dailyGoalMin: Number(r.daily_goal_minutes), reminderDefault: Number(r.default_reminder_minutes),
     subjects, mascot: r.mascot === 'clea' ? 'clea' : 'cloki',
-    cycleEnabled: Boolean(r.cycle_enabled), cycleInCalendar: Boolean(r.cycle_in_calendar),
+    cycleEnabled: Boolean(r.cycle_enabled), cycleInCalendar: Boolean(r.cycle_in_calendar), navTabs: parseTabs(r.nav_tabs),
   };
   return {
     id: String(r.id), email: String(r.email), name: String(r.display_name ?? ''),
@@ -92,8 +91,8 @@ export async function updateUser(id: string, patch: Partial<Pick<User, 'name' | 
   if (patch.lifeAreas !== undefined) { sets.push('life_areas = ?'); vals.push(JSON.stringify(patch.lifeAreas)); }
   const p = patch.prefs;
   if (p) {
-    sets.push('mascot = ?', 'cycle_enabled = ?', 'cycle_in_calendar = ?');
-    vals.push(p.mascot, p.cycleEnabled, p.cycleInCalendar);
+    sets.push('mascot = ?', 'cycle_enabled = ?', 'cycle_in_calendar = ?', 'nav_tabs = ?');
+    vals.push(p.mascot, p.cycleEnabled, p.cycleInCalendar, (p.navTabs ?? DEFAULT_TABS).join(','));
   }
   await (await db()).tx(async q => {
     if (sets.length) await q.run(`UPDATE profiles SET ${sets.join(', ')} WHERE user_id = ?`, [...vals, id]);

@@ -18,7 +18,7 @@ import {
 } from '@/lib/repo';
 import { freeSlots } from '@/lib/scheduler';
 import { isValidDate, isValidTime, todayIn, utcToZoned } from '@/lib/time';
-import { CATEGORIES, GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Category, type Gender, type Prefs, type Subject, type User, type UserType } from '@/lib/types';
+import { CATEGORIES, GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Category, type Gender, type Prefs, type Subject, type User, type UserType, OPTIONAL_TABS } from '@/lib/types';
 import { fail, InputError, int, text, time, type ActionResult } from '@/lib/validate';
 import { autoSyncFor } from '@/lib/auto-sync';
 import { normalizeWebUntisUrl, syncWebUntis, upsertFeedEvents, fetchCalendar, isWebUntisHost } from '@/lib/webuntis';
@@ -41,7 +41,10 @@ export async function completeOnboarding(form: FormData) {
   await updateUser(user.id, {
     name, userType: type in USER_TYPE_LABELS ? type : 'sonstiges', lifeAreas: areas, onboarded: true,
     gender: gender in GENDER_LABELS ? gender as Gender : null,
-    prefs: { ...user.prefs, mascot: mascotFor(gender in GENDER_LABELS ? gender as Gender : null, mascot) },
+    prefs: {
+      ...user.prefs, mascot: mascotFor(gender in GENDER_LABELS ? gender as Gender : null, mascot),
+      navTabs: form.get('tabsSent') ? OPTIONAL_TABS.filter(t => form.getAll('tabs').map(String).includes(t)) : user.prefs.navTabs,
+    },
   });
   // always start on Home; a chosen connection is offered there as the next step
   const setup = String(form.get('setup') ?? '');
@@ -429,3 +432,12 @@ export async function removeCycleEntry(id: string): Promise<ActionResult> {
   return done('Gelöscht.');
 }
 
+/** Which areas (tabs) the user wants – Home, CLOQI AI and Kalender are always there. */
+export async function saveTabs(tabs: string[]): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    const chosen = OPTIONAL_TABS.filter(t => tabs.includes(t));
+    await updateUser(user.id, { prefs: { ...user.prefs, navTabs: chosen } });
+    return done('Bereiche gespeichert.');
+  } catch (e) { return fail(e); }
+}

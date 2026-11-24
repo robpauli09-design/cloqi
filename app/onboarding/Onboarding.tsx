@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { ArrowLeft, ArrowRight, Briefcase, CalendarDays, Dumbbell, GraduationCap, Heart, School, Sparkles, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, BookOpen, BookOpenText, Briefcase, CalendarDays, Dumbbell, GraduationCap, Heart, School, Sparkles, Sun, UserRound } from 'lucide-react';
 import { completeOnboarding } from '@/app/actions/settings';
 import { Mascot, type MascotName } from '@/components/Mascot';
-import { mascotFor, type Gender } from '@/lib/types';
+import { mascotFor, OPTIONAL_TABS, TAB_INFO, type Gender, type OptionalTab } from '@/lib/types';
 import { GenderPicker } from '@/components/GenderPicker';
 import { Logo } from '@/components/Logo';
 import { SubmitButton } from '@/components/ui';
@@ -28,10 +28,15 @@ const TIMETABLE = [
   { value: 'manual', label: 'Stundenplan manuell erstellen', hint: 'Fach, Tag, Uhrzeit' },
 ];
 
+const TAB_ICON: Record<OptionalTab, React.ReactNode> = {
+  learn: <BookOpen size={20} />, life: <Sun size={20} />, sport: <Dumbbell size={20} />, vault: <BookOpenText size={20} />,
+};
+
 const MESSAGES = [
   'Hey! Schön, dass du da bist!',
   'Was machst du gerade? Dann kann ich dich besser unterstützen.',
   'Wie sieht dein Alltag aus?',
+  'Such dir aus, was du brauchst – alles hängt zusammen, aber nichts ist Pflicht.',
   'Hast du einen Stundenplan? Wenn nicht, einfach überspringen.',
   'Nutzt du schon einen Kalender? Kein Problem, wenn nicht!',
   'Fertig! CLOQI übernimmt.',
@@ -46,6 +51,8 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
   const [timetable, setTimetable] = useState('');
   const [calendar, setCalendar] = useState('');
   const setup = timetable || (calendar ? 'kalender' : '');
+  // areas: all on by default; Sport only if training is part of the day
+  const [tabs, setTabs] = useState<OptionalTab[]>(['learn', 'life', 'sport', 'vault']);
   const [chosen, setMascot] = useState<MascotName>('cloki');
   const [gender, setGender] = useState<Gender | ''>('');
   const mascot = mascotFor(gender || null, chosen);
@@ -67,6 +74,8 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
         <input type="hidden" name="userType" value={type} />
         {areas.map(a => <input key={a} type="hidden" name="areas" value={a} />)}
         <input type="hidden" name="setup" value={setup} />
+        <input type="hidden" name="tabsSent" value="1" />
+        {tabs.map(t => <input key={t} type="hidden" name="tabs" value={t} />)}
         <input type="hidden" name="mascot" value={mascot} />
         <input type="hidden" name="gender" value={gender} />
 
@@ -117,6 +126,18 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
           )}
           {step === 3 && (
             <>
+              <h1 className="h1">Was willst du in CLOQI nutzen?</h1>
+              <p className="muted mt-1">Kalender und CLOQI AI sind immer dabei. Den Rest kannst du später im Profil unter „Bereiche“ ändern.</p>
+              <div className="mt-5 grid gap-3">
+                {OPTIONAL_TABS.map(t => (
+                  <Choice key={t} active={tabs.includes(t)} onClick={() => setTabs(xs => (xs.includes(t) ? xs.filter(x => x !== t) : [...xs, t]))}
+                    icon={TAB_ICON[t]} label={TAB_INFO[t].label} hint={TAB_INFO[t].hint} />
+                ))}
+              </div>
+            </>
+          )}
+          {step === 4 && (
+            <>
               <h1 className="h1">Verbinde deinen Stundenplan.</h1>
               <div className="mt-5 grid gap-3">
                 {TIMETABLE.map(t => (
@@ -125,7 +146,7 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
               </div>
             </>
           )}
-          {step === 4 && (
+          {step === 5 && (
             <>
               <h1 className="h1">Nutzt du schon einen Kalender?</h1>
               <p className="muted mt-1">Wenn nicht, überspring diesen Schritt einfach – CLOQI ist dann dein Kalender.</p>
@@ -139,7 +160,7 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
               </div>
             </>
           )}
-          {step === 5 && (
+          {step === 6 && (
             <div className="text-center">
               <h1 className="h1">Fertig! CLOQI übernimmt.</h1>
               <p className="muted mx-auto mt-2 max-w-md">Ich habe deinen Kalender vorbereitet. Schreib mir einfach, was ansteht – ich trage es ein und plane drumherum.{setup ? ' Das Verbinden zeige ich dir gleich auf deiner Startseite.' : ''}</p>
@@ -150,18 +171,21 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
             <button type="button" className="btn-ghost" onClick={() => setStep(s => Math.max(0, s - 1))} disabled={step === 0}>
               <ArrowLeft size={16} /> Zurück
             </button>
-            {step === 3 || step === 4 ? (
+            {step === 4 || step === 5 ? (
               <div className="flex items-center gap-2">
                 <button type="button" className="btn-ghost"
-                  onClick={() => { if (step === 3) setTimetable(''); else setCalendar(''); setStep(s => s + 1); }}>
+                  onClick={() => { if (step === 4) setTimetable(''); else setCalendar(''); setStep(s => s + 1); }}>
                   Überspringen
                 </button>
-                <button type="button" className="btn-primary" onClick={() => setStep(s => s + 1)} disabled={step === 3 ? !timetable : !calendar}>
+                <button type="button" className="btn-primary" onClick={() => setStep(s => s + 1)} disabled={step === 4 ? !timetable : !calendar}>
                   Weiter <ArrowRight size={16} />
                 </button>
               </div>
             ) : step < last ? (
-              <button type="button" className="btn-primary" onClick={() => setStep(s => s + 1)} disabled={step === 0 && (!name.trim() || !gender)}>
+              <button type="button" className="btn-primary" onClick={() => {
+                if (step === 2) setTabs(['learn', 'life', ...(areas.includes('training') ? ['sport' as const] : []), 'vault']);
+                setStep(s => s + 1);
+              }} disabled={step === 0 && (!name.trim() || !gender)}>
                 Weiter <ArrowRight size={16} />
               </button>
             ) : (

@@ -53,6 +53,19 @@ export const CATEGORY_META: Record<Category, { label: string; color: string; sof
 
 export interface Subject { name: string; difficulty: 1 | 2 | 3 }
 
+/** Areas a user can switch on/off (Home, CLOQI AI and Kalender are always there; Cycle has its own opt-in). */
+export const OPTIONAL_TABS = ['learn', 'life', 'sport', 'vault'] as const;
+export type OptionalTab = (typeof OPTIONAL_TABS)[number];
+export const TAB_INFO: Record<OptionalTab, { label: string; hint: string }> = {
+  learn: { label: 'Lernen', hint: 'Tests, Hausübungen und automatisch geplante Lernzeit' },
+  life: { label: 'Life', hint: 'Routinen, Freizeit, Freunde – damit nicht nur gelernt wird' },
+  sport: { label: 'Sport', hint: 'Trainings planen und mitschreiben – CLOQI plant drumherum' },
+  vault: { label: 'Wissen', hint: 'Notizen, Lernunterlagen und was CLOQI über dich weiß' },
+};
+export const DEFAULT_TABS: OptionalTab[] = ['learn', 'life', 'sport', 'vault'];
+export const parseTabs = (v: unknown): OptionalTab[] =>
+  typeof v === 'string' ? v.split(',').filter((x): x is OptionalTab => (OPTIONAL_TABS as readonly string[]).includes(x)) : [...DEFAULT_TABS];
+
 export interface Prefs {
   studyStart: string;        // weekday earliest study time, HH:MM
   studyEnd: string;          // weekday latest end of study, HH:MM
@@ -68,6 +81,7 @@ export interface Prefs {
   mascot: 'cloki' | 'clea';
   cycleEnabled: boolean;
   cycleInCalendar: boolean;
+  navTabs: OptionalTab[];
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -85,6 +99,7 @@ export const DEFAULT_PREFS: Prefs = {
   mascot: 'cloki',
   cycleEnabled: false,
   cycleInCalendar: false,
+  navTabs: [...DEFAULT_TABS],
 };
 
 export interface User {

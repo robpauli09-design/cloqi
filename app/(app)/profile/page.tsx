@@ -6,7 +6,7 @@ import { listConnections } from '@/lib/repo';
 import { formatDateDe, utcToZoned } from '@/lib/time';
 import { cycleAvailable } from '@/lib/types';
 import { Mascot } from '@/components/Mascot';
-import { CycleSettings, DangerZone, NotificationSettings, PrefsForm, ProfileForm, SubjectsForm } from './ProfileForms';
+import { CycleSettings, DangerZone, NotificationSettings, PrefsForm, ProfileForm, SubjectsForm, TabsSettings } from './ProfileForms';
 
 export const metadata: Metadata = { title: 'Profil' };
 
@@ -31,7 +31,7 @@ export default async function ProfilePage() {
 
       <nav aria-label="Weitere Bereiche" className="card divide-y divide-line overflow-hidden lg:hidden">
         {[
-          { href: '/vault', label: 'Wissen', hint: 'Was CLOQI über dich weiß', icon: BookOpenText },
+          ...(user.prefs.navTabs.includes('vault') ? [{ href: '/vault', label: 'Wissen', hint: 'Was CLOQI über dich weiß', icon: BookOpenText }] : []),
           { href: '/connect', label: 'Kalender verbinden', hint: 'WebUntis, Google, Apple, Outlook', icon: Link2 },
           ...(cycleAvailable(user) ? [{ href: '/cycle', label: 'Cycle', hint: user.prefs.cycleEnabled ? 'Dein Zyklus – privat' : 'Periodenkalender – optional aktivieren', icon: Flower2 }] : []),
         ].map(({ href, label, hint, icon: Icon }) => (
@@ -67,6 +67,7 @@ export default async function ProfilePage() {
           </ul>
         </section>
 
+        <TabsSettings tabs={user.prefs.navTabs} />
         <PrefsForm prefs={user.prefs} />
         <div className="space-y-6">
           <SubjectsForm subjects={user.prefs.subjects} />

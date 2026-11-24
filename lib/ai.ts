@@ -10,6 +10,8 @@ import { addDays, formatDateDe, isValidDate, isValidTime, todayIn, utcToZoned, w
 import { CATEGORIES, CATEGORY_META, cycleAvailable, TASK_KIND_LABELS, type Category, type TaskKind, type User } from './types';
 import { syncWebUntis } from './webuntis';
 import { searchCalendarItems } from './calendar-search';
+import { exerciseProgress, listTemplates, listWorkouts, logWorkout, weekStats } from './sport';
+import { EXERCISES, setLabel } from './sport-data';
 import { aiCanWrite, CLOQI_IDENTITY, ensureVault, normalizePath, readVault, readVaultFile } from './vault';
 import { useQuota } from './limits';
 import { isSchoolTask, readSchool, schoolStats, searchSchool } from './school';
@@ -73,6 +75,7 @@ const TOOL_STATUS: Record<string, string> = {
   delete_study_block: 'Entfernt den Lernblock …',
   vault_read: 'Liest in deinem Wissen …', vault_search: 'Sucht in deinem Wissen …', vault_write: 'Merkt sich das …',
   schule_suchen: 'Sucht in Teams & OneNote …', schule_lesen: 'Liest deine Unterlagen …',
+  training_lesen: 'Schaut in deine Trainings …', training_eintragen: 'Trägt dein Training ein …',
   web_suchen: 'Sucht im Internet …', web_lesen: 'Liest eine Webseite …', lernmaterial_erstellen: 'Erstellt deine Lernunterlage …',
 };
 const toolStatus = (name: string) => TOOL_STATUS[name] ?? 'Ich erledige das …';
@@ -536,6 +539,7 @@ ARBEITSWEISE
 - Beim Löschen: Ruf das Lösch-Werkzeug einfach auf. Hat der Nutzer es nicht ausdrücklich verlangt, fragt CLOQI automatisch mit dem genauen Eintrag nach (stell die Frage nicht selbst). Antwortet er mit „Ja“, ruf dasselbe Werkzeug mit demselben Eintrag nochmal auf.
 - Melde Überschneidungen, die ein Werkzeug zurückgibt, ehrlich und schlage eine Lösung vor.
 - Lernunterlagen (Lernzettel, Übungstest, Karteikarten, Vokabeln, Mindmap, Referat, Formelsammlung …): Stoff zuerst aus dem Wissen/den Schulunterlagen holen, bei Bedarf web_suchen/web_lesen; dann lernmaterial_erstellen. Fachlich korrekt, auf Niveau und Lehrplan des Nutzers, Schwächen aus user.md beachten. Danach kurz sagen, was drin ist, den Link [[wiki/Fach/Titel.md]] nennen und dass man sie als PDF/Word/… herunterladen kann. Bei einem anstehenden Test darfst du eine passende Unterlage vorschlagen.
+- Sport (wenn verfügbar): Erzählt der Nutzer von einem Training, trag es mit training_eintragen ein. Für Fragen zu Fortschritt/Plan erst training_lesen. Fixe Trainingszeiten sind Termine (Kategorie training) – Lernzeit wird drumherum geplant; vor Tests eher ein leichteres Training vorschlagen, Training nie einfach streichen.
 - Internet (web_suchen/web_lesen) nur für Fachwissen; nenne die Quelle. Keine persönlichen Daten in Suchen oder Adressen.
 - Gedächtnis: Nutze, was unter „Aus deinem Gedächtnis“ und in user.md steht, aktiv (ohne es aufzuzählen). Wenn du etwas Neues und Dauerhaftes über den Nutzer erfährst (Ziele, Fächer, Training, Gewohnheiten, Vorlieben, wie er lernt), speichere es sofort ohne Nachfrage: kurze Stichpunkte mit vault_write mode=append in user.md; ausführlicheres Wissen in wiki/<thema>.md und halte wiki/index.md aktuell (vorher lesen, dann replace). Fachschwierigkeit zusätzlich mit set_subject.
 - Speichere Gesundheit, Religion, Herkunft und ähnlich sensible Themen nur, wenn der Nutzer es ausdrücklich will.
@@ -603,6 +607,42 @@ async function providerError(cfg: Cfg, res: Response, body: string): Promise<nev
   }
   throw new Error(`Der KI-Dienst ist gerade nicht erreichbar (Fehler ${res.status}). Bitte später erneut versuchen.`);
 }
+
+/** Sport – only offered when the Sport area is switched on. */
+const WD = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
+const SPORT_TOOLS: ToolDef[] = [
+  {
+    name: 'training_lesen',
+    description: 'Sport des Nutzers lesen: Trainings-Vorlagen und wann sie eingeplant sind, die letzten Trainings, Bestleistungen pro Übung, diese Woche.',
+    parameters: S({}),
+    run: async user => {
+      const [t, w, p, week] = await Promise.all([listTemplates(user.id), listWorkouts(user.id, 8), exerciseProgress(user), weekStats(user)]);
+      return {
+        vorlagen: t.map(x => ({ name: x.name, uebungen: x.exercises.map(e => e.name), eingeplant: x.schedule ? `${x.schedule.weekdays.map(d => WD[d - 1]).join('+')} ${x.schedule.time} (${x.schedule.minutes} Min)` : null })),
+        letzte_trainings: w.map(x => ({ datum: utcToZoned(x.finishedAt!, user.timezone).date, name: x.name, uebungen: x.exercises.map(e => `${e.name}: ${e.sets.map(s => setLabel(e.kind, s)).join(', ')}`) })),
+        bestleistungen: p.slice(0, 15).map(x => ({ uebung: x.name, best: x.best, mal: x.times })),
+        diese_woche: week,
+      };
+    },
+  },
+  {
+    name: 'training_eintragen',
+    description: `Ein erledigtes Training eintragen (z. B. „heute Bankdrücken 3×8 mit 60 kg, dann 20 Min laufen“). Jeden Satz einzeln. kind: weight (kg+reps), body (reps), time (sec), cardio (sec + km). Bekannte Übungen (id=Name): ${EXERCISES.map(e => `${e.id}=${e.name}`).join(', ')}.`,
+    parameters: S({
+      name: { type: 'string', description: 'z. B. "Oberkörper" oder "Laufen"' }, date: DATE, minutes: { type: 'integer' },
+      exercises: { type: 'array', items: { type: 'object', properties: {
+        id: { type: 'string' }, name: { type: 'string' }, kind: { type: 'string', enum: ['weight', 'body', 'time', 'cardio'] },
+        sets: { type: 'array', items: { type: 'object', properties: { kg: { type: 'number' }, reps: { type: 'integer' }, sec: { type: 'integer' }, km: { type: 'number' } } } },
+      } } },
+    }, ['name', 'exercises']),
+    run: async (user, a, ctx) => {
+      const date = optStr(a.date);
+      const s = await logWorkout(user, { name: str(a.name, 60), date: date && isValidDate(date) ? date : null, minutes: typeof a.minutes === 'number' ? a.minutes : null, exercises: a.exercises });
+      await log(user, ctx, 'Training eingetragen', `${str(a.name, 60)}: ${s.sets} Sätze`);
+      return { ok: true, ...s };
+    },
+  },
+];
 
 /** Web (read-only) and learning materials – available to everyone. */
 const STUDY_TOOLS: ToolDef[] = [
@@ -914,7 +954,7 @@ export async function runAgent(user: User, message: string, opts: { threadId?: s
   const school = await schoolStats(user).catch(() => null);
   const system = (await systemPrompt(user)) + schoolLine(school) + await recall(user, message);
   const pending = existing ? await takePendingDeletions(user.id, existing) : [];
-  const ctx: Ctx = { actions: [], userMessage: message, emit: opts.emit, pending, ask: [], tools: school ? [...TOOLS, ...STUDY_TOOLS, ...SCHOOL_TOOLS] : [...TOOLS, ...STUDY_TOOLS] };
+  const ctx: Ctx = { actions: [], userMessage: message, emit: opts.emit, pending, ask: [], tools: [...TOOLS, ...STUDY_TOOLS, ...(user.prefs.navTabs.includes('sport') ? SPORT_TOOLS : []), ...(school ? SCHOOL_TOOLS : [])] };
   ctx.emit?.({ type: 'status', text: 'Denkt nach …' });
   const text = message || 'Was siehst du auf dem Anhang? Trag ein, was für meinen Kalender wichtig ist.';
   await addChat(user.id, threadId, 'user', files.length ? `${message}${message ? '\n' : ''}📎 ${files.map(f => f.name).join(', ')}` : message);

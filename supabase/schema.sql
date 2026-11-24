@@ -65,6 +65,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   gender             text CHECK (gender IN ('m', 'w', 'd')),   -- m/w/d; the Cycle module is offered for w/d only
   timezone           text NOT NULL DEFAULT 'Europe/Vienna',
   mascot             text NOT NULL DEFAULT 'cloki' CHECK (mascot IN ('cloki', 'clea')),
+  nav_tabs           text,                              -- chosen areas, e.g. 'learn,life,sport,vault' (null = defaults)
   life_areas         jsonb NOT NULL DEFAULT '[]'::jsonb,      -- ["schule","training",...]
   onboarded_at       timestamptz,
   cycle_enabled      boolean NOT NULL DEFAULT false,
@@ -380,6 +381,29 @@ BEGIN
   END LOOP;
 END $$;
 
+-- ---------- SPORT -----------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS workout_templates (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name        text NOT NULL CHECK (length(name) BETWEEN 1 AND 60),
+  exercises   jsonb NOT NULL DEFAULT '[]'::jsonb,        -- [{id, name, kind, sets:[{kg, reps, sec, km}]}]
+  schedule    jsonb,                                     -- {weekdays:[1,3], time:'18:00', minutes:90}
+  event_id    uuid REFERENCES events(id) ON DELETE SET NULL,  -- the weekly calendar series
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS workouts (
+  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  template_id  uuid REFERENCES workout_templates(id) ON DELETE SET NULL,
+  name         text NOT NULL,
+  started_at   timestamptz NOT NULL DEFAULT now(),
+  finished_at  timestamptz,                              -- null = running
+  exercises    jsonb NOT NULL DEFAULT '[]'::jsonb,
+  note         text
+);
+CREATE INDEX IF NOT EXISTS workouts_user_idx ON workouts (user_id, finished_at DESC);
+
 -- ---------- lock the public Supabase API --------------------------------------------------
 -- CLOQI only talks to the database server-side (DATABASE_URL). Row level security without
 -- policies + revoked grants make the tables unreachable with the public anon/authenticated keys.
@@ -388,7 +412,7 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['users', 'profiles', 'study_settings', 'subjects', 'sessions', 'calendar_connections', 'calendars',
     'events', 'timetable_entries', 'school_holidays', 'tasks', 'study_blocks', 'sync_mappings', 'suggestions', 'vault_files',
-    'ai_actions', 'ai_usage', 'chat_threads', 'chat_messages', 'cycle_entries', 'school_items'] LOOP
+    'ai_actions', 'ai_usage', 'chat_threads', 'chat_messages', 'cycle_entries', 'school_items', 'workout_templates', 'workouts'] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
       EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);
