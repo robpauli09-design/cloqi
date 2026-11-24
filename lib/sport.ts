@@ -83,7 +83,7 @@ export async function scheduleTemplate(user: User, id: string, s: { weekdays: nu
   const q = await db();
   if (!s || !s.weekdays.length) {
     if (t.eventId) await deleteEvent(user.id, t.eventId).catch(() => undefined);
-    await q.run('UPDATE workout_templates SET schedule = NULL, event_id = NULL WHERE id = ?', [id]);
+    await q.run('UPDATE workout_templates SET schedule = NULL, event_id = NULL WHERE id = ? AND user_id = ?', [id, user.id]);
     return;
   }
   const days = [...new Set(s.weekdays.filter(d => d >= 1 && d <= 7))].sort((a, b) => a - b);
@@ -102,7 +102,7 @@ export async function scheduleTemplate(user: User, id: string, s: { weekdays: nu
   let eventId = t.eventId && (await getEvent(user.id, t.eventId)) ? t.eventId : null;
   if (eventId) await updateEvent(user.id, eventId, fields);
   else eventId = await createEvent(user.id, { ...fields, source: 'manual' });
-  await q.run('UPDATE workout_templates SET schedule = ?, event_id = ? WHERE id = ?', [JSON.stringify({ weekdays: days, time: s.time, minutes }), eventId, id]);
+  await q.run('UPDATE workout_templates SET schedule = ?, event_id = ? WHERE id = ? AND user_id = ?', [JSON.stringify({ weekdays: days, time: s.time, minutes }), eventId, id, user.id]);
 }
 
 /** A finished workout told to CLOQI AI ("heute Bankdrücken 3×8 mit 60 kg"). */
@@ -163,7 +163,8 @@ export async function finishWorkout(userId: string, id: string, w: { exercises: 
   const before = await progressAll(userId);
   await q.run(`UPDATE workouts SET exercises = ?, note = ?, finished_at = ?, started_at = coalesce(?, started_at) WHERE id = ? AND user_id = ?`,
     [JSON.stringify(exercises), w.note?.slice(0, 1000) ?? null, at?.finishedAt ?? new Date().toISOString(), at?.startedAt ?? null, id, userId]);
-  const row = await q.get('SELECT started_at, finished_at FROM workouts WHERE id = ?', [id]);
+  const row = await q.get('SELECT started_at, finished_at FROM workouts WHERE id = ? AND user_id = ? AND finished_at IS NOT NULL', [id, userId]);
+  if (!row) throw new InputError('Dieses Training gibt es nicht (mehr).');
   const records: WorkoutSummary['records'] = [];
   for (const e of exercises) {
     const best = bestOf(e);

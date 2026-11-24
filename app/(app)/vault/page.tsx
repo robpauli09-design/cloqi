@@ -3,6 +3,7 @@ import { requireReadyUser } from '@/lib/auth';
 import { readVault } from '@/lib/vault';
 import { Mascot } from '@/components/Mascot';
 import { VaultBrowser } from './VaultBrowser';
+import { linkEdges } from '@/lib/vault-links';
 
 export const metadata: Metadata = { title: 'Wissen' };
 
@@ -21,7 +22,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
         <Mascot name={user.prefs.mascot} variant="bust" size={96} className="hidden sm:block" />
       </header>
       <VaultBrowser files={files.map(f => ({ path: f.path, updatedBy: f.updatedBy, updatedAt: f.updatedAt, generated: f.generated, userWritable: f.userWritable, userDeletable: f.userDeletable }))}
-        initial={file ?? 'user.md'} tz={user.timezone} />
+        initial={file ?? 'user.md'} tz={user.timezone} edges={linkEdges(files)} />
     </div>
   );
 }

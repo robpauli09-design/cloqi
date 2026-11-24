@@ -1,6 +1,7 @@
 import 'server-only';
 import { db, newId, nowIso, type Db, type Param, type Row } from './db';
 import { decrypt, encrypt } from './crypto';
+import { queryStems, scoreNote } from './vault-links';
 import {
   DEFAULT_PREFS, type CalendarConnection, type CalendarEvent, type CalendarKind, type Category, type CycleEntry, type Prefs, type Provider,
   type StudyBlock, type Subject, type Suggestion, type Task, type TimetableEntry, type User, type UserCalendar, parseTabs, DEFAULT_TABS } from './types';
@@ -634,10 +635,18 @@ export async function deleteVaultFile(userId: string, path: string) {
   await run('DELETE FROM vault_files WHERE user_id = ? AND path = ?', [userId, path]);
 }
 
-export async function searchVault(userId: string, query: string): Promise<VaultFile[]> {
-  const like = `%${query.replace(/[%_\\]/g, m => `\\${m}`)}%`;
-  return (await all(`SELECT path, content, updated_by, updated_at FROM vault_files WHERE user_id = ? AND (path ILIKE ? OR content ILIKE ?)
-    ORDER BY updated_at DESC LIMIT 10`, [userId, like, like])).map(rowToVault);
+/**
+ * German-aware vault search (Bruch → Brüche, Bruchrechnung; pruefung → Prüfung), best matches first.
+ * A vault is small (a few hundred notes at most), so ranking in code is fast and needs no extension.
+ */
+export async function searchVault(userId: string, query: string, limit = 10): Promise<VaultFile[]> {
+  const stems = queryStems(query);
+  if (!stems.length) return [];
+  return (await listVaultFiles(userId))
+    .map(f => ({ f, s: scoreNote(stems, f.path, f.content) }))
+    .filter(x => x.s > 0)
+    .sort((x, y) => y.s - x.s || y.f.updatedAt.localeCompare(x.f.updatedAt))
+    .slice(0, limit).map(x => x.f);
 }
 
 export async function logAiAction(userId: string, tool: string, summary: string) {

@@ -1,9 +1,10 @@
 'use server';
+import { excerptFor, queryStems } from '@/lib/vault-links';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth';
 import { chatFor, transcribe, type ChatReply } from '@/lib/ai';
-import { deleteThread, deleteVaultFile, getThread, getVaultFile, listChat, listThreads, writeVaultFile, type ChatThread } from '@/lib/repo';
+import { deleteThread, deleteVaultFile, getThread, getVaultFile, listChat, listThreads, searchVault, writeVaultFile, type ChatThread } from '@/lib/repo';
 import { normalizePath, readVaultFile, userCanDelete, userCanWrite } from '@/lib/vault';
 import type { ActionResult } from '@/lib/validate';
 
@@ -87,4 +88,11 @@ export async function deleteVaultFileAction(path: string): Promise<ActionResult>
     revalidatePath('/vault');
     return { ok: true, message: 'Gelöscht.' };
   } catch (e) { return { ok: false, error: e instanceof Error ? e.message : 'Fehler' }; }
+}
+
+/** Vault search box: German-aware (Bruch → Brüche, Bruchrechnung), with a short excerpt per hit. */
+export async function searchVaultAction(query: string): Promise<{ path: string; excerpt: string }[]> {
+  const user = await requireUser();
+  const stems = queryStems(String(query ?? ''));
+  return (await searchVault(user.id, String(query ?? ''), 12)).map(f => ({ path: f.path, excerpt: excerptFor(stems, f.content.replace(/^>.*\n/, '')) }));
 }
