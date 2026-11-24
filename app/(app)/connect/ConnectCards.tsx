@@ -216,9 +216,14 @@ export function WebUntisCard({ conn, tz }: { conn: Conn | null; tz: string }) {
         <summary className="cursor-pointer font-semibold">So findest du deinen WebUntis-Link</summary>
         <ol className="mt-2 list-decimal space-y-1 pl-5 text-ink-soft">
           <li>WebUntis im Browser öffnen und deinen Stundenplan anzeigen.</li>
-          <li>Die Adresse oben im Browser kopieren (sie enthält <i>webuntis.com</i> und <i>school=…</i>).</li>
+          <li>Unten auf <b>⋮</b> tippen <b>(1)</b> und <b>„Öffentlichen Link kopieren“</b> wählen <b>(2)</b>.</li>
           <li>Hier einfügen, auf <b>Weiter</b> tippen und deine Klasse wählen.</li>
         </ol>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/help/webuntis-link.png" width={830} height={437} loading="lazy"
+          alt="WebUntis-Stundenplan: unten auf die drei Punkte tippen (1), dann „Öffentlichen Link kopieren“ (2)"
+          className="mt-3 w-full rounded-xl border border-line bg-white" />
+        <p className="mt-2 text-xs text-ink-faint">Geht auch: einfach die Adresse oben im Browser kopieren (sie enthält <i>webuntis.com</i> und <i>school=…</i>).</p>
         <p className="mt-2 text-xs text-ink-faint">Persönliche Stundenpläne sind meist nicht öffentlich – dann nimmt CLOQI den Stundenplan deiner Klasse und du wählst danach, welche Kurse (z. B. Religion/Ethik, Sprachen) du besuchst. Ein iCal-Link aus WebUntis funktioniert ebenfalls.</p>
       </details>
 

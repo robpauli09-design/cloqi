@@ -7,7 +7,7 @@ import {
 import { freeSlots } from './scheduler';
 import { createTaskFor } from './tasks';
 import { addDays, formatDateDe, isValidDate, isValidTime, todayIn, utcToZoned, weekdayOf, WEEKDAYS_DE, zonedToUtc } from './time';
-import { CATEGORIES, CATEGORY_META, TASK_KIND_LABELS, type Category, type TaskKind, type User } from './types';
+import { CATEGORIES, CATEGORY_META, cycleAvailable, TASK_KIND_LABELS, type Category, type TaskKind, type User } from './types';
 import { syncWebUntis } from './webuntis';
 import { aiCanWrite, CLOQI_IDENTITY, ensureVault, normalizePath, readVault, readVaultFile } from './vault';
 import { useQuota } from './limits';
@@ -462,6 +462,27 @@ ${top.map(([path, f]) =>
 ${f.content.length <= 1500 ? f.content : `… ${excerpt(f.content, f.word)} …`}`).join('\n')}`;
 }
 
+/** What the app has and where to find it – so CLOQI can answer "wo finde/stelle ich …?" correctly. */
+function appGuide(user: User): string {
+  const cycle = user.prefs.cycleEnabled
+    ? 'ist aktiv – unter „Cycle“ (Computer: Seitenleiste; Handy-Website: Profil-Tab → Cycle). Periode dort eintragen. Du hast keinen Zugriff auf die Zyklusdaten und fragst nicht danach.'
+    : user.gender === 'm'
+      ? 'ist für dieses Profil ausgeblendet (Geschlecht männlich). Wer es nutzen möchte, ändert das Geschlecht im Profil – dann erscheint „Cycle“.'
+      : 'gibt es (optional), ist aber noch nicht aktiviert. Aktivieren: „Cycle“ in der Seitenleiste öffnen (Handy-Website: Profil-Tab → Cycle), Einwilligung bestätigen, „Cycle aktivieren“. Danach dort die Periode eintragen.';
+  return `=== DIE CLOQI-APP (für Fragen wie „wo finde/stelle ich …?“ – erfinde keine Funktionen, die hier nicht stehen) ===
+Navigation: am Computer die Seitenleiste links (Home, CLOQI AI, Kalender, Learn, Life, Wissen, Kalender verbinden${cycleAvailable(user) ? ', Cycle' : ''}; Konto & Einstellungen über den Namen links unten). Am Handy unten drei Tabs: Kalender (oben umschaltbar: Heute · Kalender · Lernen · Life), CLOQI AI in der Mitte, Profil (mit Wissen, Kalender verbinden${cycleAvailable(user) ? ', Cycle' : ''}).
+- Home/Heute: Tagesüberblick, nächste Stunde und nächster Termin, „Mein Tag“, Lernserie, CLOQI Insight.
+- Kalender: Tag- und Wochenansicht; Eintrag antippen zum Bearbeiten/Löschen, „+“ für einen neuen Termin. Tests rot, Entfall orange gestreift.
+- Learn: anstehende Tests & Aufgaben, automatisch geplante Lernblöcke, Lernplanung.
+- Life: Routinen (Training, Arbeit, Freunde, Musikschule …), freie Zeit der Woche, private Termine.
+- Wissen: der Vault (soul.md, user.md, wiki/, raw-sources/) – was du über den Nutzer weißt.
+- Kalender verbinden: WebUntis (normalen Link einfügen – in WebUntis im Stundenplan unten auf „⋮“ → „Öffentlichen Link kopieren“), Google, Outlook, Apple-Kalender-Abo, ICS-/CSV-Import, Stundenplan manuell erstellen.
+- Profil (Konto & Einstellungen): Name, Geschlecht, Zeitzone, Lernzeiten & Fächer, Erinnerungen/Benachrichtigungen, Daten exportieren, Datenschutz & Konto löschen.
+- Cycle (Zyklus-/Periodenkalender, nur auf der Website, noch nicht in der App): ${cycle}
+- CLOQI AI: dieser Chat. Verlauf oben rechts, neuer Chat mit dem Stift; Fotos/PDFs über „+“, Sprechen über das Mikrofon.
+- Die Handy-App (Kalender · CLOQI AI · Profil) kann Kalender, Chat und Termine; Verbindungen und Cycle gibt es dort noch nicht – die laufen über die Website.`;
+}
+
 async function systemPrompt(user: User): Promise<string> {
   const tz = user.timezone;
   const now = new Date();
@@ -507,6 +528,8 @@ ${await read('wiki/index.md', 2000)}
 
 === Dateien in deinem Wissen (lies sie mit vault_read, wenn sie zur Frage passen) ===
 ${(await listVaultFiles(user.id)).map(f => `- ${f.path}${f.path.startsWith('raw-sources/') ? ' (Material des Nutzers)' : ''}`).slice(0, 80).join('\n')}
+
+${appGuide(user)}
 
 === Lernzeiten-Einstellungen ===
 Mo–Fr ${user.prefs.studyStart}–${user.prefs.studyEnd}, Wochenende ${user.prefs.weekendStart}–${user.prefs.weekendEnd}${user.prefs.studyOnSunday ? '' : ', sonntags kein Lernen'}, max. ${user.prefs.maxStudyPerDay} Min/Tag.

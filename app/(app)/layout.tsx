@@ -1,4 +1,5 @@
 import { requireReadyUser } from '@/lib/auth';
+import { cycleAvailable } from '@/lib/types';
 import { cookies } from 'next/headers';
 import { AppFrame, MobileNav, MobileSectionTabs } from '@/components/Navigation';
 import { SIDEBAR_COOKIE } from '@/lib/sidebar';
@@ -8,7 +9,7 @@ import { RememberPath } from '@/components/RememberPath';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireReadyUser();
-  const nav = { name: user.name || user.email, email: user.email, mascot: user.prefs.mascot, cycle: user.prefs.cycleEnabled };
+  const nav = { name: user.name || user.email, email: user.email, mascot: user.prefs.mascot, cycle: cycleAvailable(user) };
   const collapsed = (await cookies()).get(SIDEBAR_COOKIE)?.value === '1';
   return (
     <AppFrame nav={nav} collapsed={collapsed}>

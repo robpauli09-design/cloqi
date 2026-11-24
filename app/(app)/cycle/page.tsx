@@ -7,18 +7,25 @@ import { addDays, daysBetween, formatDateDe, todayIn, WEEKDAYS_SHORT_DE, weekday
 import { Mascot } from '@/components/Mascot';
 import { ProgressRing } from '@/components/ui';
 import { CycleLog, DeleteEntry } from './CycleForms';
+import { CycleSettings } from '../profile/ProfileForms';
+import { cycleAvailable } from '@/lib/types';
 
 export const metadata: Metadata = { title: 'Cycle' };
 
 export default async function CyclePage() {
   const user = await requireReadyUser();
   if (!user.prefs.cycleEnabled || !await hasCycleConsent(user.id)) {
+    // activate right here (explicit consent, Art. 9 GDPR) instead of sending people to the profile
     return (
-      <div className="card mx-auto max-w-xl p-8 text-center">
-        <Mascot name="clea" variant="bust" size={140} className="mx-auto w-fit" />
-        <h1 className="h1 mt-4">Cycle ist nicht aktiviert</h1>
-        <p className="muted mt-2">Der Zyklus-Tracker ist ein optionales Modul. Du kannst ihn im Profil mit deiner ausdrücklichen Einwilligung aktivieren.</p>
-        <Link href="/profile" className="btn-primary mt-6">Zum Profil</Link>
+      <div className="mx-auto max-w-xl space-y-4">
+        <div className="card p-8 text-center">
+          <Mascot name="clea" variant="bust" size={140} className="mx-auto w-fit" />
+          <h1 className="h1 mt-4">Dein Periodenkalender</h1>
+          <p className="muted mt-2">Cycle schätzt deine nächste Periode und zeigt sie dir – privat, verschlüsselt und nur in CLOQI. Es ist optional und erst nach deiner Einwilligung aktiv.</p>
+        </div>
+        {cycleAvailable(user)
+          ? <CycleSettings enabled={false} inCalendar={false} />
+          : <div className="card card-pad text-sm text-ink-soft">Cycle ist für dein Profil ausgeblendet. Du kannst dein Geschlecht im <Link href="/profile#profil" className="font-semibold text-leaf-dark">Profil</Link> ändern.</div>}
       </div>
     );
   }

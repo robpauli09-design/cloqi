@@ -33,7 +33,7 @@ export default async function ProfilePage() {
         {[
           { href: '/vault', label: 'Wissen', hint: 'Was CLOQI über dich weiß', icon: BookOpenText },
           { href: '/connect', label: 'Kalender verbinden', hint: 'WebUntis, Google, Apple, Outlook', icon: Link2 },
-          ...(user.prefs.cycleEnabled ? [{ href: '/cycle', label: 'Cycle', hint: 'Dein Zyklus – privat', icon: Flower2 }] : []),
+          ...(cycleAvailable(user) ? [{ href: '/cycle', label: 'Cycle', hint: user.prefs.cycleEnabled ? 'Dein Zyklus – privat' : 'Periodenkalender – optional aktivieren', icon: Flower2 }] : []),
         ].map(({ href, label, hint, icon: Icon }) => (
           <Link key={href} href={href} className="flex items-center gap-3 px-4 py-3.5 active:bg-paper">
             <span className="grid h-9 w-9 place-items-center rounded-xl bg-leaf-soft text-leaf-dark"><Icon size={18} /></span>
