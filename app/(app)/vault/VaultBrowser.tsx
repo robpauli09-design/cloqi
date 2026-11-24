@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { Bot, FilePlus2, FileText, Folder, Loader2, Lock, Pencil, Save, Trash2, X } from 'lucide-react';
+import { Bot, Download, FilePlus2, FileText, Folder, GraduationCap, Loader2, Lock, Pencil, Save, Trash2, X } from 'lucide-react';
+import { ARTEN, FORMAT_LABEL, materialInfo, type Format } from '@/lib/lernmaterial-meta';
 import { createVaultNote, deleteVaultFileAction, openVaultFile, saveVaultFile } from '@/app/actions/ai';
 import { formatDateDe, utcToZoned } from '@/lib/time';
 import { Markdown } from '@/components/Markdown';
@@ -91,6 +92,7 @@ export function VaultBrowser({ files, initial, tz }: { files: FileInfo[]; initia
               {info.updatedBy === 'ai' ? 'zuletzt von CLOQI' : info.updatedBy === 'user' ? 'zuletzt von dir' : 'Vorlage'} · {formatDateDe(utcToZoned(info.updatedAt, tz).date)}
             </span>
           )}
+          {content !== null && !editing && !info?.generated && <DownloadMenu path={current} content={content} />}
           {info?.userWritable && !editing && content !== null && (
             <button className="btn-outline btn-sm" onClick={() => { setDraft(content); setEditing(true); }}><Pencil size={14} /> Bearbeiten</button>
           )}
@@ -117,5 +119,25 @@ export function VaultBrowser({ files, initial, tz }: { files: FileInfo[]; initia
         ) : <Markdown text={content} onLink={openLink} />}
       </section>
     </div>
+  );
+}
+
+/** Download a note – learning materials in the formats that fit them (PDF, Word, PowerPoint, Anki/Quizlet, Excel). */
+function DownloadMenu({ path, content }: { path: string; content: string }) {
+  const material = materialInfo(content);
+  const formats: Format[] = material ? [...ARTEN[material.art].formats] : ['pdf', 'docx', 'md'];
+  const href = (f: Format, extra = '') => `/api/vault/download?path=${encodeURIComponent(path)}&format=${f}${extra}`;
+  const test = material && (material.art === 'uebungstest' || material.art === 'uebungsblatt') && /^##\s*(Lösung|Loesung)/im.test(content);
+  return (
+    <details className="group relative">
+      <summary className="btn-outline btn-sm cursor-pointer list-none"><Download size={14} /> Herunterladen</summary>
+      <div className="absolute right-0 z-20 mt-1 w-60 animate-pop rounded-2xl border border-line bg-white p-1.5 shadow-lift">
+        {material && <p className="flex items-center gap-1.5 px-3 pb-1 pt-1.5 text-xs font-semibold text-leaf-dark"><GraduationCap size={13} /> {ARTEN[material.art].label} · {material.fach}</p>}
+        {formats.map(f => (
+          <a key={f} href={href(f)} className="block rounded-xl px-3 py-2 text-sm hover:bg-leaf-soft hover:text-leaf-deep">{FORMAT_LABEL[f]}</a>
+        ))}
+        {test && <a href={href('pdf', '&loesungen=0')} className="block rounded-xl px-3 py-2 text-sm hover:bg-leaf-soft hover:text-leaf-deep">PDF ohne Lösungen</a>}
+      </div>
+    </details>
   );
 }

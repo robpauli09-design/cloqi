@@ -13,6 +13,7 @@ import { accessToken, ExpiredError, GRAPH } from './integrations';
 import { applyPlan, proposePlan } from './planning';
 import { createTask, getConnection, markConnectionSync, setTaskStatus, upsertConnection } from './repo';
 import type { User } from './types';
+import { htmlToText } from './text';
 
 /** Homework/notes are re-checked when CLOQI is opened and the last check is older than this. */
 export const SCHOOL_SYNC_EVERY_MS = 30 * 60000;
@@ -46,21 +47,6 @@ async function list(user: User, path: string, max: number): Promise<J[]> {
     next = page['@odata.nextLink'] ?? null;
   }
   return out.slice(0, max);
-}
-
-/** OneNote/Teams HTML → compact plain text (no images, no styling). */
-export function htmlToText(html: string): string {
-  return html
-    .replace(/<(script|style|head)[\s\S]*?<\/\1>/gi, '')
-    .replace(/<img[^>]*>/gi, ' [Bild] ')
-    .replace(/<(br|\/p|\/div|\/h[1-6]|\/tr|\/li)[^>]*>/gi, '\n')
-    .replace(/<li[^>]*>/gi, '- ')
-    .replace(/<td[^>]*>/gi, ' | ')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
-    .replace(/[ \t]+/g, ' ').replace(/ *\n */g, '\n').replace(/\n{3,}/g, '\n\n')
-    .trim();
 }
 
 // ---------------------------------------------------------------- sync
