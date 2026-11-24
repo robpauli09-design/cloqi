@@ -7,10 +7,10 @@ import { linkEdges } from '@/lib/vault-links';
 
 export const metadata: Metadata = { title: 'Wissen' };
 
-export default async function VaultPage({ searchParams }: { searchParams: Promise<{ file?: string }> }) {
+export default async function VaultPage({ searchParams }: { searchParams: Promise<{ file?: string; view?: string }> }) {
   const user = await requireReadyUser();
   const files = await readVault(user);
-  const { file } = await searchParams;
+  const { file, view } = await searchParams;
   return (
     <div className="space-y-6">
       <header className="flex items-center gap-4">
@@ -22,7 +22,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
         <Mascot name={user.prefs.mascot} variant="bust" size={96} className="hidden sm:block" />
       </header>
       <VaultBrowser files={files.map(f => ({ path: f.path, updatedBy: f.updatedBy, updatedAt: f.updatedAt, generated: f.generated, userWritable: f.userWritable, userDeletable: f.userDeletable }))}
-        initial={file ?? 'user.md'} tz={user.timezone} edges={linkEdges(files)} />
+        initial={file ?? 'user.md'} tz={user.timezone} edges={linkEdges(files)} graphFirst={view === 'graph'} />
     </div>
   );
 }

@@ -15,7 +15,7 @@ interface FileInfo { path: string; updatedBy: string; updatedAt: string; generat
 
 const FOLDER_HINT: Record<string, string> = { 'raw-sources': 'Dein Material · CLOQI liest nur', wiki: 'Gehört CLOQI' };
 
-export function VaultBrowser({ files, initial, tz, edges }: { files: FileInfo[]; initial: string; tz: string; edges: Edge[] }) {
+export function VaultBrowser({ files, initial, tz, edges, graphFirst = false }: { files: FileInfo[]; initial: string; tz: string; edges: Edge[]; graphFirst?: boolean }) {
   const router = useRouter();
   const [current, setCurrent] = useState(files.some(f => f.path === initial) ? initial : 'user.md');
   const [content, setContent] = useState<string | null>(null);
@@ -24,7 +24,7 @@ export function VaultBrowser({ files, initial, tz, edges }: { files: FileInfo[];
   const [newName, setNewName] = useState('');
   const [pending, start] = useTransition();
   const info = files.find(f => f.path === current);
-  const [graph, setGraph] = useState(false);
+  const [graph, setGraph] = useState(graphFirst);
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<{ path: string; excerpt: string }[] | null>(null);
   useEffect(() => {

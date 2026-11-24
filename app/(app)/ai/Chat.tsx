@@ -290,7 +290,7 @@ export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotN
       {/* desktop: no title or line – just the icons in the top right corner */}
       <header className="flex items-center gap-1 border-b border-line pb-3 lg:fixed lg:right-6 lg:top-5 lg:z-30 lg:border-0 lg:pb-0">
         <h1 className="flex-1 font-display text-lg font-semibold lg:sr-only">CLOQI AI{aiEnabled ? '' : <span className="ml-2 text-xs font-medium text-ink-faint">Basis-Modus</span>}</h1>
-        <Link href="/vault" className={iconBtn} aria-label="Wissen" title="Wissen"><BookOpenText size={19} /></Link>
+        <Link href="/vault?view=graph" className={iconBtn} aria-label="Wissen" title="Wissen"><BookOpenText size={19} /></Link>
         {aiEnabled && <button className={iconBtn} aria-label="Chat-Verlauf" title="Chat-Verlauf" onClick={openHistory}><History size={19} /></button>}
         {aiEnabled && messages.length > 0 && <button className={iconBtn} aria-label="Neuer Chat" title="Neuer Chat" onClick={newChat}><SquarePen size={19} /></button>}
       </header>
