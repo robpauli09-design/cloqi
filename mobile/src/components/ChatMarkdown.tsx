@@ -1,4 +1,4 @@
-import { View } from 'react-native';
+import { Linking, View } from 'react-native';
 import { colors, font } from '@/theme';
 import { T } from './ui';
 
@@ -7,16 +7,18 @@ import { T } from './ui';
 
 function inline(text: string, key: string): React.ReactNode[] {
   const out: React.ReactNode[] = [];
-  const re = /(\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`|\*([^*\s][^*]*)\*|_([^_\s][^_]*)_)/g;
+  const re = /(\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)|\[\[([^\]]+)\]\]|\*\*([^*]+)\*\*|__([^_]+)__|`([^`]+)`|\*([^*\s][^*]*)\*|_([^_\s][^_]*)_)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let i = 0;
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(text.slice(last, m.index));
     const k = `${key}-${i++}`;
-    if (m[2] || m[3]) out.push(<T key={k} style={{ fontFamily: font.bold }}>{m[2] ?? m[3]}</T>);
-    else if (m[4]) out.push(<T key={k} style={{ fontFamily: font.medium, backgroundColor: colors.paper }}>{m[4]}</T>);
-    else out.push(<T key={k} style={{ fontStyle: 'italic' }}>{m[5] ?? m[6]}</T>);
+    if (m[2]) { const url = m[3]; out.push(<T key={k} style={{ color: colors.leafDark, textDecorationLine: 'underline' }} onPress={() => void Linking.openURL(url)}>{m[2]}</T>); }
+    else if (m[4]) out.push(<T key={k} style={{ fontFamily: font.semibold }}>{m[4].split('/').pop()!.replace(/\.md$/, '')}</T>);
+    else if (m[5] || m[6]) out.push(<T key={k} style={{ fontFamily: font.bold }}>{m[5] ?? m[6]}</T>);
+    else if (m[7]) out.push(<T key={k} style={{ fontFamily: font.medium, backgroundColor: colors.paper }}>{m[7]}</T>);
+    else out.push(<T key={k} style={{ fontStyle: 'italic' }}>{m[8] ?? m[9]}</T>);
     last = re.lastIndex;
   }
   if (last < text.length) out.push(text.slice(last));

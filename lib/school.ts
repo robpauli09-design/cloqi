@@ -217,7 +217,7 @@ export async function readSchool(user: User, id: string, part = 1) {
   const parts = Math.max(1, Math.ceil(text.length / PART));
   const n = Math.min(Math.max(1, Math.floor(part) || 1), parts);
   return {
-    title: r.title, where: r.context, part: n, parts,
+    title: r.title, where: r.context, part: n, parts, link: r.web_url ?? null,
     text: text.slice((n - 1) * PART, n * PART) || '(leere Seite)',
     note: text.includes('[Bild]') ? 'Bilder/Handschrift kann ich nicht lesen.' : undefined,
   };
