@@ -60,6 +60,27 @@ const UPGRADES = [
   'CREATE INDEX IF NOT EXISTS ai_usage_user_idx ON ai_usage (user_id, kind, created_at DESC)',
   'ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY',
   "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.ai_usage FROM anon, authenticated; END IF; END $$",
+  // Microsoft Schule (Teams & OneNote, read-only)
+  'ALTER TABLE calendar_connections DROP CONSTRAINT IF EXISTS calendar_connections_provider_check',
+  "ALTER TABLE calendar_connections ADD CONSTRAINT calendar_connections_provider_check CHECK (provider IN ('google', 'outlook', 'apple', 'webuntis', 'school'))",
+  'ALTER TABLE tasks ADD COLUMN IF NOT EXISTS external_id text',
+  'CREATE UNIQUE INDEX IF NOT EXISTS tasks_external_idx ON tasks (user_id, external_id) WHERE external_id IS NOT NULL',
+  `CREATE TABLE IF NOT EXISTS school_items (
+     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+     user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+     kind text NOT NULL CHECK (kind IN ('assignment', 'page')),
+     external_id text NOT NULL,
+     title text NOT NULL,
+     context text NOT NULL DEFAULT '',
+     body text NOT NULL DEFAULT '',
+     api_path text NOT NULL DEFAULT '',
+     web_url text,
+     due_at timestamptz,
+     done boolean NOT NULL DEFAULT false,
+     modified_at timestamptz,
+     UNIQUE (user_id, kind, external_id))`,
+  'ALTER TABLE school_items ENABLE ROW LEVEL SECURITY',
+  "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.school_items FROM anon, authenticated; END IF; END $$",
 ];
 
 const isoInstant =(x: string) => new Date(x.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00')).toISOString();

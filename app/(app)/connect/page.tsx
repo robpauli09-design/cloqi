@@ -4,18 +4,19 @@ import { feedUrls } from '@/lib/feed';
 import { isConfigured } from '@/lib/integrations';
 import { getConnection, listBreaks, listTimetable } from '@/lib/repo';
 import { Mascot } from '@/components/Mascot';
-import { AppleCard, ImportCard, ManualTimetable, ProviderCard, WebUntisCard } from './ConnectCards';
+import { schoolStats } from '@/lib/school';
+import { AppleCard, ImportCard, ManualTimetable, ProviderCard, SchoolCard, WebUntisCard } from './ConnectCards';
 
 export const metadata: Metadata = { title: 'Kalender verbinden' };
 
 export default async function ConnectPage({ searchParams }: { searchParams: Promise<{ ok?: string; error?: string }> }) {
   const user = await requireReadyUser();
   const { ok, error } = await searchParams;
-  const conns = Object.fromEntries(await Promise.all((['google', 'outlook', 'webuntis', 'apple'] as const).map(async p => {
+  const conns = Object.fromEntries(await Promise.all((['google', 'outlook', 'webuntis', 'apple', 'school'] as const).map(async p => {
     const c = await getConnection(user.id, p);
     return [p, c ? { status: c.status, lastSyncAt: c.lastSyncAt, lastError: c.lastError, config: c.config } : null] as const;
   })));
-  const conn = (p: 'google' | 'outlook' | 'webuntis' | 'apple') => conns[p];
+  const conn = (p: 'google' | 'outlook' | 'webuntis' | 'apple' | 'school') => conns[p];
   return (
     <div className="space-y-6">
       <header className="flex items-end gap-4">
@@ -37,6 +38,7 @@ export default async function ConnectPage({ searchParams }: { searchParams: Prom
         <ProviderCard provider="outlook" configured={isConfigured('outlook')} conn={conn('outlook')} tz={user.timezone} />
         <AppleCard conn={conn('apple')} urls={await feedUrls(user)} tz={user.timezone} />
         <WebUntisCard conn={conn('webuntis')} tz={user.timezone} />
+        <SchoolCard configured={isConfigured('school')} conn={conn('school')} stats={await schoolStats(user).catch(() => null)} tz={user.timezone} />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-2">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useActionState, useState, useTransition } from 'react';
-import { Apple, ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, CheckCircle2, Copy, FileUp, Loader2, RefreshCw, School, Trash2, Unplug, XCircle } from 'lucide-react';
+import { Apple, ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, BookOpenText, CheckCircle2, Copy, FileUp, Loader2, Lock, RefreshCw, School, Trash2, Unplug, XCircle } from 'lucide-react';
 import {
   addHoliday, addLesson, connectWebUntis, disconnect, lookupWebUntis, saveWebUntisGroups, enableAppleFeed, importTimetableFile, refreshProviderCalendars, removeHoliday,
   removeLesson, saveFeedCategories, saveProviderSettings, syncNow, type WebUntisLookup,
@@ -50,7 +50,7 @@ function Facts({ rows }: { rows: [React.ReactNode, string, string][] }) {
   );
 }
 
-function SyncButtons({ provider }: { provider: 'google' | 'outlook' | 'webuntis' | 'apple' }) {
+function SyncButtons({ provider }: { provider: 'google' | 'outlook' | 'webuntis' | 'apple' | 'school' }) {
   const [pending, start] = useTransition();
   return (
     <div className="flex flex-wrap gap-2">
@@ -139,6 +139,52 @@ function CategoryPicker({ name, selected, label }: { name: string; selected: str
         ))}
       </div>
     </fieldset>
+  );
+}
+
+/** Microsoft Schule: Teams homework + OneNote + class files, read-only and optional. */
+export function SchoolCard({ configured, conn, stats, tz }: {
+  configured: boolean; conn: Conn | null; tz: string;
+  stats: { openHomework: number; pages: number; notebooks: string[] } | null;
+}) {
+  return (
+    <Card title="Microsoft Schule (Teams & OneNote)" logo={<BookOpenText size={20} className="text-[#5B5FC7]" />}>
+      <div id="schule" className="-mt-20 pt-20" />
+      <Status conn={conn} tz={tz} />
+      <p className="-mt-1 text-sm text-ink-soft">
+        Optional – nur sinnvoll, wenn deine Schule Teams und OneNote nutzt. CLOQI holt sich deine Hausübungen und kann deinen Stoff nachschlagen.
+      </p>
+      <Facts rows={[
+        [<ArrowDownToLine key="a" size={13} />, 'Was kommt rein', 'Hausübungen aus Teams (mit Lernzeit eingeplant), OneNote-Notizbücher und Teams-Dateien zum Nachschlagen für CLOQI AI'],
+        [<Lock key="b" size={13} />, 'Nur lesen', 'CLOQI kann in Teams und OneNote nichts ändern, abgeben oder löschen – und sieht keine Noten'],
+        [<ArrowLeftRight key="c" size={13} />, 'Anmeldung', 'Mit deiner Schul-E-Mail (Microsoft-Schulkonto)'],
+      ]} />
+      {!configured && (
+        <p className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-[#8a4a0e]">
+          Auf diesem Server noch nicht eingerichtet: Es fehlen MICROSOFT_CLIENT_ID und MICROSOFT_CLIENT_SECRET.
+        </p>
+      )}
+      {!conn ? (
+        <>
+          {configured
+            ? <a href="/api/integrations/school/start" className="btn-primary self-start">Mit Schulkonto verbinden</a>
+            : <button disabled className="btn-primary self-start">Mit Schulkonto verbinden</button>}
+          <p className="text-xs text-ink-faint">Manche Schulen erlauben das Verbinden von Apps nicht – dann siehst du einen Hinweis und alles andere funktioniert ganz normal.</p>
+        </>
+      ) : (
+        <>
+          {conn.status === 'expired' && <a href="/api/integrations/school/start" className="btn-primary self-start">Neu verbinden</a>}
+          {stats && (
+            <p className="text-sm">
+              <b>{stats.openHomework}</b> offene Hausübung{stats.openHomework === 1 ? '' : 'en'} · <b>{stats.pages}</b> OneNote-Seiten
+              {stats.notebooks.length > 0 && <span className="text-ink-soft"> aus {stats.notebooks.slice(0, 4).join(', ')}{stats.notebooks.length > 4 ? ' …' : ''}</span>}
+            </p>
+          )}
+          <p className="text-xs text-ink-faint">Frag CLOQI AI z. B. „Was ist der Stoff für den Mathe-Test?“ oder „Was muss ich bei der Deutsch-Hausübung machen?“</p>
+          <SyncButtons provider="school" />
+        </>
+      )}
+    </Card>
   );
 }
 

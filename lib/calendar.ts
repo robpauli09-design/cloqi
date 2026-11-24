@@ -85,11 +85,15 @@ export async function getCalendarItems(user: User, fromIso: string, toIso: strin
     }
     for (const t of tasks) {
       if (t.dueAt < fromIso || t.dueAt >= toIso) continue;
+      // show the real title (e.g. a Teams homework "Übung Brüche S. 42") unless it is the automatic "Test Mathe"
+      const label = TASK_KIND_LABELS[t.kind];
+      const custom = t.title !== `${label} ${t.subject}`;
       items.push({
-        key: `task:${t.id}`, kind: 'deadline', id: t.id, title: `${TASK_KIND_LABELS[t.kind]}: ${t.subject}`,
+        key: `task:${t.id}`, kind: 'deadline', id: t.id,
+        title: !custom ? `${label}: ${t.subject}` : t.title.startsWith(label) ? t.title : `${label}: ${t.title}`,
         startAt: t.dueAt, endAt: new Date(Date.parse(t.dueAt) + 50 * 60000).toISOString(), allDay: false,
         category: t.kind === 'hausuebung' ? 'hausuebung' : 'pruefung', status: t.status === 'done' ? 'done' : 'active',
-        source: 'cloqi', location: null, teacher: null, description: t.title, readOnly: false, taskId: t.id,
+        source: 'cloqi', location: null, teacher: null, description: custom ? t.subject : t.title, readOnly: false, taskId: t.id,
         reminderMinutes: 24 * 60, calendarLabel: 'CLOQI Learn', calendarId: studyCal?.id ?? null, calendarColor: null,
         recurring: false, occurrenceDate: null,
       });

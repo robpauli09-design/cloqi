@@ -189,7 +189,7 @@ export interface StudyBlock {
   note: string | null;
 }
 
-export type Provider = 'webuntis' | 'google' | 'outlook' | 'apple';
+export type Provider = 'webuntis' | 'google' | 'outlook' | 'apple' | 'school';
 
 export interface CalendarConnection {
   id: string;

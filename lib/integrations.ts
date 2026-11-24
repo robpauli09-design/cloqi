@@ -11,8 +11,16 @@ import type { CalendarEvent, CalendarItem, Category, ConnectionConfig, User } fr
 // Google Calendar API and Microsoft Graph via fetch (no SDKs). Tokens are stored encrypted
 // (AES-256-GCM) and never reach the browser.
 
-export type OAuthProvider = 'google' | 'outlook';
-export const PROVIDER_LABEL: Record<OAuthProvider, string> = { google: 'Google Kalender', outlook: 'Outlook' };
+export type OAuthProvider = 'google' | 'outlook' | 'school';
+/** Providers that are real calendars (two-way sync). */
+export type CalendarProvider = Exclude<OAuthProvider, 'school'>;
+export const PROVIDER_LABEL: Record<OAuthProvider, string> = { google: 'Google Kalender', outlook: 'Outlook', school: 'Microsoft Schule' };
+
+/** Microsoft Schule: READ-ONLY permissions only (Teams homework without grades, OneNote, files). Nothing can be written. */
+export const SCHOOL_SCOPE = 'offline_access User.Read EduAssignments.ReadBasic Notes.Read.All Files.Read.All Team.ReadBasic.All';
+/** Overridable only for local tests with a stand-in server. */
+export const MS_LOGIN = (process.env.MICROSOFT_LOGIN_BASE || 'https://login.microsoftonline.com').replace(/\/$/, '');
+export const GRAPH = (process.env.MICROSOFT_GRAPH_BASE || 'https://graph.microsoft.com/v1.0').replace(/\/$/, '');
 
 export function appUrl(): string {
   return (process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
@@ -29,12 +37,14 @@ function config(p: OAuthProvider): ProviderConfig {
       extra: { access_type: 'offline', prompt: 'consent', include_granted_scopes: 'true' },
     };
   }
-  const tenant = process.env.MICROSOFT_TENANT || 'common';
+  // school accounts only for "school" (Teams/OneNote live in the school's Microsoft 365)
+  const tenant = p === 'school' ? 'organizations' : process.env.MICROSOFT_TENANT || 'common';
   return {
     clientId: process.env.MICROSOFT_CLIENT_ID, clientSecret: process.env.MICROSOFT_CLIENT_SECRET,
-    authUrl: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`,
-    tokenUrl: `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`,
-    scope: 'offline_access Calendars.ReadWrite', extra: { response_mode: 'query' },
+    authUrl: `${MS_LOGIN}/${tenant}/oauth2/v2.0/authorize`,
+    tokenUrl: `${MS_LOGIN}/${tenant}/oauth2/v2.0/token`,
+    scope: p === 'school' ? SCHOOL_SCOPE : 'offline_access Calendars.ReadWrite',
+    extra: p === 'school' ? { response_mode: 'query', prompt: 'select_account' } : { response_mode: 'query' },
   };
 }
 
@@ -53,7 +63,7 @@ export function authorizationUrl(p: OAuthProvider, state: string): string {
 
 interface TokenResponse { access_token: string; refresh_token?: string; expires_in: number }
 
-class ExpiredError extends Error {}
+export class ExpiredError extends Error {}
 
 async function tokenRequest(p: OAuthProvider, body: Record<string, string>): Promise<TokenResponse> {
   const c = config(p);
@@ -75,6 +85,7 @@ export async function finishOAuth(user: User, p: OAuthProvider, code: string) {
     status: 'connected', accessTokenEnc: encrypt(t.access_token), refreshTokenEnc: t.refresh_token ? encrypt(t.refresh_token) : null,
     tokenExpiresAt: new Date(Date.now() + (t.expires_in - 60) * 1000).toISOString(),
   });
+  if (p === 'school') return; // no calendars – homework and notes are read by lib/school.ts
   const calendars = await listRemoteCalendars(user, p);
   const primary = calendars.find(c => c.primary) ?? calendars[0];
   await upsertConnection(user.id, p, {
@@ -87,12 +98,12 @@ export async function finishOAuth(user: User, p: OAuthProvider, code: string) {
   });
 }
 
-async function accessToken(user: User, p: OAuthProvider): Promise<string> {
+export async function accessToken(user: User, p: OAuthProvider): Promise<string> {
   const conn = await getConnection(user.id, p);
   if (!conn?.accessTokenEnc) throw new Error('Nicht verbunden.');
   if (conn.tokenExpiresAt && conn.tokenExpiresAt > new Date().toISOString()) return decrypt(conn.accessTokenEnc);
   if (!conn.refreshTokenEnc) throw new ExpiredError('Die Verbindung ist abgelaufen. Bitte neu verbinden.');
-  const t = await tokenRequest(p, { grant_type: 'refresh_token', refresh_token: decrypt(conn.refreshTokenEnc), ...(p === 'outlook' ? { scope: config(p).scope } : {}) });
+  const t = await tokenRequest(p, { grant_type: 'refresh_token', refresh_token: decrypt(conn.refreshTokenEnc), ...(p !== 'google' ? { scope: config(p).scope } : {}) });
   await upsertConnection(user.id, p, {
     accessTokenEnc: encrypt(t.access_token), ...(t.refresh_token ? { refreshTokenEnc: encrypt(t.refresh_token) } : {}),
     tokenExpiresAt: new Date(Date.now() + (t.expires_in - 60) * 1000).toISOString(),
@@ -219,7 +230,7 @@ export const splitExternalUid = (uid: string) => { const i = uid.lastIndexOf('::
 export interface SyncStats { pushed: number; pulled: number; deleted: number; conflicts: number }
 
 /** Keeps the CLOQI calendars for the selected remote calendars in line with the connection config. */
-async function syncCalendarList(user: User, connId: string, p: OAuthProvider, cfg: ConnectionConfig) {
+async function syncCalendarList(user: User, connId: string, p: CalendarProvider, cfg: ConnectionConfig) {
   const wanted = new Set(cfg.importCalendarIds ?? []);
   const existing = await calendarsForConnection(user.id, connId);
   for (const c of existing) if (!wanted.has(c.externalId ?? '')) await deleteCalendar(user.id, c.id);
@@ -238,7 +249,7 @@ async function syncCalendarList(user: User, connId: string, p: OAuthProvider, cf
  * 3. Export CLOQI's own items (chosen categories) into the export calendar; remote edits of those come back.
  * No silent overwrites, no duplicates (stable external ids + sync_map).
  */
-export async function syncProvider(user: User, p: OAuthProvider, now = new Date()): Promise<SyncStats> {
+export async function syncProvider(user: User, p: CalendarProvider, now = new Date()): Promise<SyncStats> {
   const conn = await getConnection(user.id, p);
   if (!conn) throw new Error('Nicht verbunden.');
   const stats: SyncStats = { pushed: 0, pulled: 0, deleted: 0, conflicts: 0 };

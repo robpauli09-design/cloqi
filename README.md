@@ -37,7 +37,7 @@ Lokal: `npm install`, `.env.local` aus `.env.example` anlegen (gleiche Werte, `A
 | `AI_TRANSCRIBE_MODEL` | optional | Spracheingabe, Standard `gpt-transcribe` |
 | `CRON_SECRET` | empfohlen | beliebiger langer Zufallswert; Vercel Cron sendet ihn automatisch |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional | Google Kalender (Redirect `{APP_URL}/api/integrations/google/callback`) |
-| `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT` | optional | Outlook (Redirect `{APP_URL}/api/integrations/outlook/callback`) |
+| `MICROSOFT_CLIENT_ID` / `MICROSOFT_CLIENT_SECRET` / `MICROSOFT_TENANT` | optional | Outlook + Microsoft Schule (Teams & OneNote, read-only). Redirects `{APP_URL}/api/integrations/outlook/callback` and `{APP_URL}/api/integrations/school/callback`. Delegated Graph permissions: `Calendars.ReadWrite` (Outlook) and `User.Read EduAssignments.ReadBasic Notes.Read.All Files.Read.All Team.ReadBasic.All` (Schule) |
 | `DEFAULT_TIMEZONE` | optional | Standard `Europe/Vienna` |
 
 Ohne `AI_API_KEY`/`AI_MODEL` läuft CLOQI AI im **Basis-Modus** (versteht kurze Kalenderbefehle und fragt vor jeder Änderung).

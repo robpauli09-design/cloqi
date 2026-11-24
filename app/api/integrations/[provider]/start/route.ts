@@ -7,7 +7,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ prov
   const { provider } = await params;
   const user = await currentUser();
   if (!user) return NextResponse.redirect(new URL('/login', req.url));
-  if (provider !== 'google' && provider !== 'outlook') return NextResponse.json({ error: 'Unbekannter Anbieter' }, { status: 404 });
+  if (provider !== 'google' && provider !== 'outlook' && provider !== 'school') return NextResponse.json({ error: 'Unbekannter Anbieter' }, { status: 404 });
   if (!isConfigured(provider as OAuthProvider)) {
     return NextResponse.redirect(new URL(`/connect?error=${encodeURIComponent('Dieser Anbieter ist auf dem Server noch nicht eingerichtet (Client-ID fehlt).')}`, req.url));
   }

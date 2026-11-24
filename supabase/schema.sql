@@ -117,7 +117,7 @@ CREATE INDEX IF NOT EXISTS sessions_expiry_idx ON sessions (expires_at);
 CREATE TABLE IF NOT EXISTS calendar_connections (
   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id            uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  provider           text NOT NULL CHECK (provider IN ('google', 'outlook', 'apple', 'webuntis')),
+  provider           text NOT NULL CHECK (provider IN ('google', 'outlook', 'apple', 'webuntis', 'school')),
   status             text NOT NULL DEFAULT 'connected' CHECK (status IN ('connected', 'error', 'expired')),
   secret_enc         text,          -- WebUntis iCal link / Apple feed token (encrypted)
   lookup_hash        text,          -- sha256 of the Apple feed token, for the public feed URL
@@ -233,9 +233,28 @@ CREATE TABLE IF NOT EXISTS tasks (
   priority           smallint NOT NULL DEFAULT 2 CHECK (priority BETWEEN 1 AND 3),
   status             text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'done')),
   completed_at       timestamptz,
-  created_at         timestamptz NOT NULL DEFAULT now()
+  created_at         timestamptz NOT NULL DEFAULT now(),
+  external_id        text                                   -- e.g. 'teams:<assignment id>' (read-only import)
 );
 CREATE INDEX IF NOT EXISTS tasks_user_due_idx ON tasks (user_id, due_at);
+CREATE UNIQUE INDEX IF NOT EXISTS tasks_external_idx ON tasks (user_id, external_id) WHERE external_id IS NOT NULL;
+
+-- Microsoft Schule (read-only): Teams homework + OneNote page index. Page content is fetched live, never stored.
+CREATE TABLE IF NOT EXISTS school_items (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id       uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind          text NOT NULL CHECK (kind IN ('assignment', 'page')),
+  external_id   text NOT NULL,
+  title         text NOT NULL,
+  context       text NOT NULL DEFAULT '',          -- class / notebook › section
+  body          text NOT NULL DEFAULT '',          -- homework instructions (short)
+  api_path      text NOT NULL DEFAULT '',          -- 'me' or 'groups/<id>' (where the page lives)
+  web_url       text,
+  due_at        timestamptz,
+  done          boolean NOT NULL DEFAULT false,
+  modified_at   timestamptz,
+  UNIQUE (user_id, kind, external_id)
+);
 
 CREATE TABLE IF NOT EXISTS study_blocks (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -368,7 +387,7 @@ DECLARE t text;
 BEGIN
   FOREACH t IN ARRAY ARRAY['users', 'profiles', 'study_settings', 'subjects', 'sessions', 'calendar_connections', 'calendars',
     'events', 'timetable_entries', 'school_holidays', 'tasks', 'study_blocks', 'sync_mappings', 'suggestions', 'vault_files',
-    'ai_actions', 'ai_usage', 'chat_threads', 'chat_messages', 'cycle_entries'] LOOP
+    'ai_actions', 'ai_usage', 'chat_threads', 'chat_messages', 'cycle_entries', 'school_items'] LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY', t);
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
       EXECUTE format('REVOKE ALL ON public.%I FROM anon, authenticated', t);

@@ -1,4 +1,5 @@
 'use server';
+import { forgetSchool, syncSchool } from '@/lib/school';
 
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
@@ -192,6 +193,11 @@ export async function saveWebUntisGroups(_prev: ActionResult | null, form: FormD
 export async function syncNow(provider: 'webuntis' | OAuthProvider): Promise<ActionResult> {
   try {
     const user = await requireUser();
+    if (provider === 'school') {
+      if (!isConfigured('school')) throw new InputError('Microsoft Schule ist auf diesem Server nicht eingerichtet.');
+      const s = await syncSchool(user);
+      return done(`Microsoft Schule: ${s.homework} Hausübungen (${s.newTasks} neu eingeplant), ${s.pages} OneNote-Seiten.`);
+    }
     if (provider === 'webuntis') {
       const s = await syncWebUntis(user);
       return done(`Aktualisiert: ${s.imported} neu, ${s.updated} geändert, ${s.cancelled + s.removed} entfallen.`);
@@ -206,6 +212,7 @@ export async function disconnect(provider: 'webuntis' | 'apple' | OAuthProvider)
   try {
     const user = await requireUser();
     if (provider === 'google' || provider === 'outlook') await revokeAccess(user, provider);
+    if (provider === 'school') await forgetSchool(user.id);
     await deleteConnection(user.id, provider);
     return done('Verbindung getrennt. Importierte Termine wurden aus CLOQI entfernt.');
   } catch (e) { return fail(e); }
