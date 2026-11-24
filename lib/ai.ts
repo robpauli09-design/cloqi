@@ -877,11 +877,18 @@ async function viaChat(cfg: Cfg, user: User, system: string, history: { role: 'u
 // ---------- one turn ----------
 
 function cleanLinks(text: string, ctx: Ctx): string {
-  return text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (all, label: string, url: string) => {
-    if (ctx.sources?.some(s => s.url === url) || ctx.webFound?.has(url) || ctx.userMessage.includes(url)) return all;
-    try { if (allowedWebUrl(url, { userMessage: '', found: new Set() }).url === new URL(url).toString()) return all; } catch { /* not allowed */ }
-    return label;
-  });
+  const allowed = (url: string) => {
+    if (ctx.sources?.some(s => s.url === url) || ctx.webFound?.has(url) || ctx.userMessage.includes(url)) return true;
+    try { return allowedWebUrl(url, { userMessage: '', found: new Set() }).url === new URL(url).toString(); } catch { return false; }
+  };
+  // repeat until stable, and drop brackets from removed labels, so leftovers can never form a new link
+  for (let i = 0; i < 10; i++) {
+    const next = text.replace(/\[([^\]]*)\]\(([^)\s]*)\)/g, (all, label: string, url: string) =>
+      (/^https?:\/\//.test(url) && allowed(url) && !/[[\]]/.test(label) ? all : label.replace(/[[\]]/g, '')));
+    if (next === text) break;
+    text = next;
+  }
+  return text;
 }
 
 /** One short hint (instead of whole notebooks) – the AI looks things up with schule_suchen when needed. */
