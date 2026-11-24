@@ -5,6 +5,7 @@ import { isConfigured, syncProvider } from '@/lib/integrations';
 import { detectMissedBlocks } from '@/lib/planning';
 import { getUser, listAllConnections, listUserIds } from '@/lib/repo';
 import { syncWebUntis } from '@/lib/webuntis';
+import { syncSchool } from '@/lib/school';
 
 // Regular background sync (e.g. every 30 minutes from a scheduler):
 // Authorization: Bearer <CRON_SECRET>
@@ -22,6 +23,7 @@ export async function POST(req: NextRequest) {
     try {
       if (r.provider === 'webuntis') await syncWebUntis(user);
       else if ((r.provider === 'google' || r.provider === 'outlook') && isConfigured(r.provider)) await syncProvider(user, r.provider);
+      else if (r.provider === 'school' && isConfigured('school')) await syncSchool(user);
       result.ok++;
     } catch { result.failed++; }
   }
