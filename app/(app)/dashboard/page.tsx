@@ -48,7 +48,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
               </div>
             </div>
           </div>
-          <Mascot name={user.prefs.mascot} variant="bust" size={190} float priority className="mx-auto shrink-0 sm:mx-0" />
+          <Mascot name={user.prefs.mascot} variant="bust" size={190} priority className="mx-auto shrink-0 sm:mx-0" />
         </div>
       </section>
 
