@@ -336,7 +336,8 @@ export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotN
                 ? (m.status === 'Denkt nach …' || !m.steps?.length) && <p className="flex items-center gap-2 text-xs text-ink-soft"><Loader2 size={14} className="animate-spin text-leaf" />{m.status ?? 'Denkt nach …'}</p>
                 : <>
                   {/* the AI writes light Markdown (**bold**, lists) – render it instead of showing the stars */}
-                  <Markdown text={m.text} compact onLink={target => router.push(`/vault?file=${encodeURIComponent(target)}`)} />
+                  {/* links only become clickable once the answer is final (the server removes unchecked ones) */}
+                  <Markdown text={m.streaming ? m.text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1') : m.text} compact onLink={target => router.push(`/vault?file=${encodeURIComponent(target)}`)} />
                   {m.streaming && <span className="mt-1 inline-block h-4 w-1.5 animate-pulse rounded-sm bg-leaf-dark" />}
                 </>}
               {m.actions && m.actions.length > 0 && (

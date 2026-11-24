@@ -277,7 +277,7 @@ export default function Ai() {
                 ? (item.status === 'Denkt nach …' || !item.steps?.length) ? <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}><ActivityIndicator color={colors.leaf} /><T variant="muted">{item.status ?? 'Denkt nach …'}</T></View> : null
                 : item.role === 'user'
                   ? <T style={{ color: colors.white }}>{item.content}</T>
-                  : <ChatMarkdown text={item.content} cursor={item.streaming} />}
+                  : <ChatMarkdown text={item.streaming ? item.content.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1') : item.content} cursor={item.streaming} />}
               {!!item.actions?.length && (
                 <View style={{ gap: 4, marginTop: 8 }}>
                   {item.actions.map((a, i) => <T key={i} variant="small" style={st.action}>✓ {a}</T>)}

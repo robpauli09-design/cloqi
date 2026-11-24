@@ -876,6 +876,14 @@ async function viaChat(cfg: Cfg, user: User, system: string, history: { role: 'u
 
 // ---------- one turn ----------
 
+function cleanLinks(text: string, ctx: Ctx): string {
+  return text.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, (all, label: string, url: string) => {
+    if (ctx.sources?.some(s => s.url === url) || ctx.webFound?.has(url) || ctx.userMessage.includes(url)) return all;
+    try { if (allowedWebUrl(url, { userMessage: '', found: new Set() }).url === new URL(url).toString()) return all; } catch { /* not allowed */ }
+    return label;
+  });
+}
+
 /** One short hint (instead of whole notebooks) – the AI looks things up with schule_suchen when needed. */
 function schoolLine(s: Awaited<ReturnType<typeof schoolStats>>): string {
   if (!s) return '';
@@ -911,6 +919,9 @@ export async function runAgent(user: User, message: string, opts: { threadId?: s
     : await viaChat(cfg, user, system, history, text, files, ctx);
   if (!reply) reply = ctx.actions.length ? 'Erledigt!' : 'Das habe ich leider nicht geschafft. Versuch es bitte anders formuliert.';
   if (!ctx.streamed) ctx.emit?.({ type: 'delta', text: reply }); // providers without streaming: whole answer at once
+  // Links in the answer: only to checked sources. A link the model wrote because of injected text
+  // ("[hier klicken](https://evil/?d=…)") must not be able to send data anywhere → keep only its label.
+  reply = cleanLinks(reply, ctx);
   if (ctx.sources?.length) {
     const esc = (t: string) => t.replace(/[[\]]/g, '').slice(0, 80);
     const line = `\n\n**Quellen:** ${ctx.sources.slice(0, 6).map(s => `[${esc(s.title)}](${s.url.replace(/\)/g, '%29')})`).join(' · ')}`;
