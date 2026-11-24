@@ -117,3 +117,12 @@ export function relativeDayDe(dateStr: string, today: string): string {
   if (diff > 2 && diff < 7) return WEEKDAYS_DE[weekdayOf(dateStr) - 1];
   return formatDateDe(dateStr);
 }
+
+/** ISO calendar week ("KW") of a YYYY-MM-DD day. */
+export function isoWeek(day: string): number {
+  const d = new Date(`${day}T12:00:00Z`);
+  const wd = (d.getUTCDay() + 6) % 7;            // Mo = 0
+  d.setUTCDate(d.getUTCDate() - wd + 3);         // Thursday of this week decides the year
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(), 0, 4));
+  return 1 + Math.round(((d.getTime() - firstThursday.getTime()) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
+}

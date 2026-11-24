@@ -7,5 +7,6 @@ export function eventForm(b: Record<string, unknown>): FormData {
     if (b[k] !== undefined && b[k] !== null) form.set(k, String(b[k]));
   }
   if (b.allDay === true) form.set('allDay', 'on');
+  if (Array.isArray(b.repeatDays)) for (const d of b.repeatDays) form.append('repeatDays', String(d));
   return form;
 }

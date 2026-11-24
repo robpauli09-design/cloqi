@@ -9,6 +9,7 @@ import { createTaskFor } from './tasks';
 import { addDays, formatDateDe, isValidDate, isValidTime, todayIn, utcToZoned, weekdayOf, WEEKDAYS_DE, zonedToUtc } from './time';
 import { CATEGORIES, CATEGORY_META, cycleAvailable, TASK_KIND_LABELS, type Category, type TaskKind, type User } from './types';
 import { syncWebUntis } from './webuntis';
+import { searchCalendarItems } from './calendar-search';
 import { aiCanWrite, CLOQI_IDENTITY, ensureVault, normalizePath, readVault, readVaultFile } from './vault';
 import { useQuota } from './limits';
 import { isSchoolTask, readSchool, schoolStats, searchSchool } from './school';
@@ -152,6 +153,7 @@ const TOOLS: ToolDef[] = [
       title: { type: 'string' }, date: DATE, start: TIME, end: TIME,
       category: { type: 'string', enum: CATEGORIES }, location: { type: 'string' },
       repeat: { type: 'string', enum: ['none', 'daily', 'weekly', 'biweekly', 'monthly', 'yearly'] }, repeat_until: DATE,
+      repeat_weekdays: { type: 'array', items: { type: 'integer', minimum: 1, maximum: 7 }, description: 'nur bei weekly/biweekly: Wochentage 1=Mo … 7=So, z. B. [1,3] für Mo + Mi (ein Termin statt mehrerer Serien)' },
       reminder_minutes: { type: 'integer' },
     }, ['title', 'date', 'start', 'end', 'category']),
     run: async (user, a, ctx) => {
@@ -166,6 +168,7 @@ const TOOLS: ToolDef[] = [
       const id = await createEvent(user.id, {
         title, category: cat(a.category), startAt, endAt, location: optStr(a.location), source: 'assistant', calendarId: await mainCalendarId(user.id),
         recurrenceFreq: freq, recurrenceInterval: repeat === 'biweekly' ? 2 : 1, recurrenceUntil: freq && until && isValidDate(until) ? until : null,
+        recurrenceDays: freq === 'weekly' && Array.isArray(a.repeat_weekdays) ? [...new Set([...(a.repeat_weekdays as number[]).filter(d => Number.isInteger(d) && d >= 1 && d <= 7), weekdayOf(date)])].sort((x, y) => x - y) : null,
         reminderMinutes: typeof a.reminder_minutes === 'number' ? Math.max(0, Math.min(10080, Math.round(a.reminder_minutes))) : user.prefs.reminderDefault,
       });
       await log(user, ctx, 'Termin erstellt', `${title} – ${formatDateDe(date, { weekday: true })} ${start}–${end}${freq ? ` (${repeat})` : ''}`);
@@ -338,17 +341,12 @@ const TOOLS: ToolDef[] = [
   },
   {
     name: 'search_calendar',
-    description: 'Einträge nach Namen suchen (z. B. „Fußball“, „Arzt“, „Mathe“) – 60 Tage zurück bis 120 Tage voraus. Nutze das, bevor du einen Termin änderst oder löschst, den du nicht in der Wochenliste siehst.',
+    description: 'Einträge nach Namen/Ort/Notiz suchen (z. B. „Fußball“, „Arzt“, „Mathe“) – 60 Tage zurück bis 120 Tage voraus. Nutze das, bevor du einen Termin änderst oder löschst, den du nicht in der Wochenliste siehst.',
     parameters: S({ query: { type: 'string' } }, ['query']),
     run: async (user, a) => {
-      const q = str(a.query, 60).toLowerCase();
-      need(q.length >= 2, 'Suchbegriff zu kurz.');
-      const today = todayIn(user.timezone);
-      const items = await getCalendarItems(user, zonedToUtc(addDays(today, -60), '00:00', user.timezone).toISOString(), zonedToUtc(addDays(today, 120), '00:00', user.timezone).toISOString(), { includeHidden: true });
-      const hits = items.filter(i => `${i.title} ${i.location ?? ''} ${i.description ?? ''}`.toLowerCase().includes(q));
-      // recurring series: show the next occurrences only
-      return hits.filter(i => i.startAt >= new Date(Date.now() - 86400000).toISOString()).slice(0, 25).map(i => calendarEntry(i, user.timezone))
-        .concat(hits.filter(i => i.startAt < new Date(Date.now() - 86400000).toISOString()).slice(-5).map(i => calendarEntry(i, user.timezone)));
+      const q = str(a.query, 60);
+      need(q.trim().length >= 2, 'Suchbegriff zu kurz.');
+      return (await searchCalendarItems(user, q, { aheadDays: 120 })).map(i => calendarEntry(i, user.timezone));
     },
   },
   {

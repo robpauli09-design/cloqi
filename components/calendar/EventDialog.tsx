@@ -251,6 +251,20 @@ function EventForm({ state, calendars, reminderDefault, onClose }: {
             </Select>
           </div>
         )}
+        {['weekly', 'biweekly', 'custom'].includes(repeat) && (!editing || scope === 'series') && (
+          <fieldset>
+            <legend className="label">An diesen Tagen (optional, z. B. Training Mo + Mi)</legend>
+            <div className="flex flex-wrap gap-1.5">
+              {['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'].map((l, i) => (
+                <label key={l} className="cursor-pointer">
+                  <input type="checkbox" name="repeatDays" value={i + 1} defaultChecked={d?.repeatDays.includes(i + 1)} className="peer sr-only" />
+                  <span className="grid h-9 w-10 place-items-center rounded-xl border border-line text-sm font-semibold text-ink-soft transition peer-checked:border-leaf peer-checked:bg-leaf-soft peer-checked:text-leaf-dark peer-focus-visible:ring-2 peer-focus-visible:ring-leaf">{l}</span>
+                </label>
+              ))}
+            </div>
+            <p className="mt-1 text-xs text-ink-faint">Der Wochentag des Datums ist immer dabei.</p>
+          </fieldset>
+        )}
         {repeat !== 'none' && (!editing || scope === 'series') && (
           <div>
             <label className="label" htmlFor="ev-until">Wiederholen bis (optional)</label>

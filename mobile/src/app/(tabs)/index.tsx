@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -18,17 +18,51 @@ type View_ = 'heute' | 'tag' | 'liste';
 
 export default function Kalender() {
   const [view, setView] = useState<View_>('heute');
+  const [searching, setSearching] = useState(false);
   const router = useRouter();
   return (
     <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}>
-        <Segmented<View_> value={view} onChange={setView} options={[{ value: 'heute', label: 'Heute' }, { value: 'tag', label: 'Tag' }, { value: 'liste', label: 'Liste' }]} />
+      <View style={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Segmented<View_> value={view} onChange={v => { setSearching(false); setView(v); }} options={[{ value: 'heute', label: 'Heute' }, { value: 'tag', label: 'Tag' }, { value: 'liste', label: 'Liste' }]} />
+        </View>
+        <Pressable onPress={() => setSearching(s => !s)} hitSlop={8} accessibilityRole="button" accessibilityLabel="Termine suchen" style={[st.searchBtn, searching && { backgroundColor: colors.leafSoft }]}>
+          <Ionicons name={searching ? 'close' : 'search'} size={20} color={colors.leafDark} />
+        </Pressable>
       </View>
-      {view === 'heute' ? <TodayView /> : <CalendarView mode={view} />}
+      {searching ? <SearchView /> : view === 'heute' ? <TodayView /> : <CalendarView mode={view} />}
       <Pressable onPress={() => router.push('/neuer-termin')} style={({ pressed }) => [st.fab, pressed && { transform: [{ scale: 0.94 }] }]} accessibilityRole="button" accessibilityLabel="Neuer Termin">
         <Ionicons name="add" size={30} color={colors.white} />
       </Pressable>
     </SafeAreaView>
+  );
+}
+
+/** Search like Google Calendar: title, place, notes – tap a hit to open it. */
+function SearchView() {
+  const router = useRouter();
+  const [q, setQ] = useState('');
+  const [hits, setHits] = useState<Item[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    if (q.trim().length < 2) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      api<{ items: Item[] }>(`/calendar/search?q=${encodeURIComponent(q.trim())}`)
+        .then(r => { if (alive) { setHits(r.items); setError(null); } })
+        .catch(e => { if (alive) setError(errorText(e)); });
+    }, 300);
+    return () => { alive = false; clearTimeout(t); };
+  }, [q]);
+  const shown = q.trim().length >= 2 ? hits : null; // short input: no results shown
+  return (
+    <ScrollView contentContainerStyle={st.scroll} keyboardShouldPersistTaps="handled">
+      <TextInput value={q} onChangeText={setQ} placeholder="Termine suchen (z. B. Fußball, Arzt)" autoFocus returnKeyType="search"
+        style={st.searchInput} placeholderTextColor={colors.inkFaint} accessibilityLabel="Suchbegriff" />
+      <ErrorBox text={error} />
+      {shown && !shown.length && <T variant="muted">Nichts gefunden.</T>}
+      {shown?.map(i => <ItemRow key={i.key} item={i} showDate onPress={() => router.push({ pathname: '/termin', params: { item: JSON.stringify(i) } })} />)}
+    </ScrollView>
   );
 }
 
@@ -258,6 +292,8 @@ function CalendarView({ mode }: { mode: 'tag' | 'liste' }) {
 
 const st = StyleSheet.create({
   scroll: { padding: 16, gap: 14, paddingBottom: 120 },
+  searchBtn: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line },
+  searchInput: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, fontFamily: font.regular, fontSize: 16, color: colors.ink },
   firstIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.leafSoft, alignItems: 'center', justifyContent: 'center' },
   fakeInput: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, borderRadius: 22, paddingLeft: 16, padding: 6 },
   fakeSend: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.leafDark, alignItems: 'center', justifyContent: 'center' },

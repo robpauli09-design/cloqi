@@ -1,4 +1,5 @@
 'use server';
+import { searchCalendarItems } from '@/lib/calendar-search';
 
 import { revalidatePath } from 'next/cache';
 import { requireUser } from '@/lib/auth';
@@ -209,4 +210,10 @@ export async function upcomingReminders(): Promise<ReminderItem[]> {
       return minutes === null ? null : { key: i.key, title: i.title, startAt: i.startAt, remindAt: new Date(Date.parse(i.startAt) - minutes * 60000).toISOString(), kind: i.kind };
     })
     .filter((x): x is ReminderItem => x !== null && Date.parse(x.startAt) > now);
+}
+
+/** Calendar search box (title, place, notes, teacher). */
+export async function searchCalendarAction(query: string): Promise<CalendarItem[]> {
+  const user = await requireUser();
+  return searchCalendarItems(user, String(query ?? ''));
 }

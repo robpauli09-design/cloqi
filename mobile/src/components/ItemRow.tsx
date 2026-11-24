@@ -4,7 +4,7 @@ import { categoryColor, categoryLabel, categorySoft, colors, font, itemMark, MAR
 import { T } from './ui';
 
 /** One calendar entry (lesson, event, study block, deadline) – like the agenda view on the website. */
-export function ItemRow({ item, onPress }: { item: Item; onPress?: () => void }) {
+export function ItemRow({ item, onPress, showDate = false }: { item: Item; onPress?: () => void; showDate?: boolean }) {
   const mark = itemMark(item);
   const ms = mark ? MARK_STYLE[mark] : null;
   const cancelled = mark === 'cancelled';
@@ -15,6 +15,7 @@ export function ItemRow({ item, onPress }: { item: Item; onPress?: () => void })
       style={({ pressed }) => [st.row, { backgroundColor: ms?.soft ?? categorySoft[item.category] ?? colors.leafSoft }, cancelled && st.cancelled, mark === 'exam' && st.exam, pressed && { opacity: 0.75 }]}>
       <View style={[st.bar, { backgroundColor: color }]} />
       <View style={st.time}>
+        {showDate && <T variant="small" style={{ fontFamily: font.semibold }}>{item.date.slice(8, 10)}.{item.date.slice(5, 7)}.</T>}
         {item.allDay ? <T style={st.timeText}>ganztägig</T> : <>
           <T style={[st.timeText, ms && { color: ms.text }]}>{item.start}</T>
           <T variant="small">{item.end}</T>

@@ -136,6 +136,7 @@ export interface CalendarEvent {
   recurrenceFreq: 'daily' | 'weekly' | 'monthly' | 'yearly' | null;
   recurrenceInterval: number;
   recurrenceUntil: string | null;
+  recurrenceDays: number[] | null;    // weekly on these weekdays (1 = Mo … 7 = So)
   exdates: string[];
   seriesId: string | null;
   syncState: 'clean' | 'dirty' | 'conflict';

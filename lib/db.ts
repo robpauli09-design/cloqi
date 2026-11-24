@@ -60,6 +60,8 @@ const UPGRADES = [
   'CREATE INDEX IF NOT EXISTS ai_usage_user_idx ON ai_usage (user_id, kind, created_at DESC)',
   'ALTER TABLE ai_usage ENABLE ROW LEVEL SECURITY',
   "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.ai_usage FROM anon, authenticated; END IF; END $$",
+  // weekly series on chosen weekdays ("1,3,5" = Mo, Mi, Fr)
+  'ALTER TABLE events ADD COLUMN IF NOT EXISTS recurrence_days text',
   // Microsoft Schule (Teams & OneNote, read-only)
   'ALTER TABLE calendar_connections DROP CONSTRAINT IF EXISTS calendar_connections_provider_check',
   "ALTER TABLE calendar_connections ADD CONSTRAINT calendar_connections_provider_check CHECK (provider IN ('google', 'outlook', 'apple', 'webuntis', 'school'))",

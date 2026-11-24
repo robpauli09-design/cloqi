@@ -218,6 +218,7 @@ function rowToEvent(r: Row): CalendarEvent {
     reminderMinutes: r.reminder_minutes === null || r.reminder_minutes === undefined ? null : Number(r.reminder_minutes),
     recurrenceFreq: (str(r.recurrence_freq) as CalendarEvent['recurrenceFreq']) ?? null,
     recurrenceInterval: Number(r.recurrence_interval ?? 1) || 1, recurrenceUntil: str(r.recurrence_until),
+    recurrenceDays: r.recurrence_days ? String(r.recurrence_days).split(',').map(Number).filter(d => d >= 1 && d <= 7) : null,
     exdates: json<string[]>(r.exdates, []), seriesId: str(r.series_id),
     syncState: (str(r.sync_state) as CalendarEvent['syncState']) ?? 'clean', remoteVersion: str(r.remote_version),
     createdAt: String(r.created_at), updatedAt: String(r.updated_at),
@@ -243,7 +244,7 @@ export interface EventInput {
   title: string; description?: string | null; startAt: string; endAt: string; allDay?: boolean; calendarId?: string | null;
   category: Category; source?: CalendarEvent['source']; externalUid?: string | null; connectionId?: string | null;
   status?: CalendarEvent['status']; location?: string | null; teacher?: string | null; reminderMinutes?: number | null;
-  recurrenceFreq?: CalendarEvent['recurrenceFreq']; recurrenceInterval?: number; recurrenceUntil?: string | null;
+  recurrenceFreq?: CalendarEvent['recurrenceFreq']; recurrenceInterval?: number; recurrenceUntil?: string | null; recurrenceDays?: number[] | null;
   exdates?: string[]; seriesId?: string | null; syncState?: CalendarEvent['syncState']; remoteVersion?: string | null;
 }
 
@@ -251,11 +252,12 @@ export async function createEvent(userId: string, e: EventInput): Promise<string
   const id = newId();
   const calendarId = e.calendarId ?? (await calendarOfKind(userId, 'cloqi')).id;
   await run(`INSERT INTO events (id, user_id, calendar_id, title, description, location, teacher, starts_at, ends_at, all_day, category, source,
-      status, reminder_minutes, recurrence_freq, recurrence_interval, recurrence_until, exdates, series_id, external_uid, sync_state, remote_version)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      status, reminder_minutes, recurrence_freq, recurrence_interval, recurrence_until, recurrence_days, exdates, series_id, external_uid, sync_state, remote_version)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
     id, userId, calendarId, e.title.slice(0, 200), e.description ?? null, e.location ?? null, e.teacher ?? null, e.startAt, e.endAt,
     e.allDay ?? false, e.category, e.source ?? 'manual', e.status ?? 'active', e.reminderMinutes ?? null, e.recurrenceFreq ?? null,
-    e.recurrenceInterval ?? 1, e.recurrenceFreq ? e.recurrenceUntil ?? null : null, JSON.stringify(e.exdates ?? []), e.seriesId ?? null,
+    e.recurrenceInterval ?? 1, e.recurrenceFreq ? e.recurrenceUntil ?? null : null,
+    e.recurrenceFreq === 'weekly' && e.recurrenceDays?.length ? e.recurrenceDays.join(',') : null, JSON.stringify(e.exdates ?? []), e.seriesId ?? null,
     e.externalUid ?? null, e.syncState ?? 'clean', e.remoteVersion ?? null]);
   return id;
 }
@@ -263,7 +265,7 @@ export async function createEvent(userId: string, e: EventInput): Promise<string
 const EVENT_COLUMNS: Record<string, string> = {
   title: 'title', description: 'description', startAt: 'starts_at', endAt: 'ends_at', category: 'category', status: 'status',
   location: 'location', teacher: 'teacher', reminderMinutes: 'reminder_minutes', recurrenceFreq: 'recurrence_freq',
-  recurrenceInterval: 'recurrence_interval', recurrenceUntil: 'recurrence_until', calendarId: 'calendar_id', seriesId: 'series_id',
+  recurrenceInterval: 'recurrence_interval', recurrenceUntil: 'recurrence_until', recurrenceDays: 'recurrence_days', calendarId: 'calendar_id', seriesId: 'series_id',
   syncState: 'sync_state', remoteVersion: 'remote_version', externalUid: 'external_uid', allDay: 'all_day',
 };
 

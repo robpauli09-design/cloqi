@@ -205,3 +205,14 @@ test('conflicts: detects overlaps but ignores lesson-vs-lesson', () => {
   ]);
   assert.deepEqual(c.map(x => `${x.a.key}-${x.b.key}`), ['l1-arzt', 'l2-arzt']);
 });
+
+test('weekly series on several weekdays (training Mo + Mi)', () => {
+  // first: Monday 2026-11-02 18:00 Vienna, Mo + Mi, until 2026-11-18, skip Wed 2026-11-11
+  const s = '2026-11-02T17:00:00.000Z', e = '2026-11-02T18:30:00.000Z';
+  const occ = expandOccurrences(s, e, { freq: 'weekly', interval: 1, until: '2026-11-18', exdates: ['2026-11-11'], weekdays: [1, 3] }, '2026-10-01T00:00:00Z', '2027-01-01T00:00:00Z', 'Europe/Vienna');
+  assert.deepEqual(occ.map(o => o.date), ['2026-11-02', '2026-11-04', '2026-11-09', '2026-11-16', '2026-11-18']);
+  // biweekly, window in the middle of the series
+  const bi = expandOccurrences(s, e, { freq: 'weekly', interval: 2, until: null, exdates: [], weekdays: [1, 5] }, '2026-11-20T00:00:00Z', '2026-12-10T00:00:00Z', 'Europe/Vienna');
+  assert.deepEqual(bi.map(o => o.date), ['2026-11-20', '2026-11-30', '2026-12-04']); // weeks of 2.11., 16.11., 30.11.
+  assert.equal(describeRule({ freq: 'weekly', interval: 1, weekdays: [3, 1] }), 'Jede Woche: Mo, Mi');
+});

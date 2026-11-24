@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, Plus, Sparkles } from 'lucide-react';
 import { findConflicts } from '@/lib/conflicts';
-import { addDays, formatDateDe, MONTHS_DE, startOfWeek } from '@/lib/time';
+import { addDays, formatDateDe, isoWeek, MONTHS_DE, startOfWeek } from '@/lib/time';
 import type { CalendarItem, UserCalendar } from '@/lib/types';
 import type { MascotName } from '../Mascot';
 import { CalendarList, CalendarSidebar } from './CalendarSidebar';
@@ -13,6 +13,7 @@ import { TimeGrid } from './TimeGrid';
 import { MonthView } from './MonthView';
 import { AgendaView } from './AgendaView';
 import { EventDialog, type DialogState } from './EventDialog';
+import { CalendarSearch, type CalendarSearchHandle } from './CalendarSearch';
 
 export type CalendarView = 'day' | 'week' | 'month' | 'agenda';
 
@@ -74,6 +75,28 @@ export function CalendarApp(props: CalendarAppProps) {
 
   const openCreate = (d: string, start = '09:00', end = '10:00') => setDialog({ mode: 'create', date: d, start, end });
   const openItem = (item: CalendarItem) => setDialog({ mode: 'view', item });
+  const search = useRef<CalendarSearchHandle>(null);
+  const newDate = () => (view === 'day' ? date : date < today && view !== 'month' ? date : today);
+
+  // keyboard shortcuts like Google Calendar: t today · d/w/m/a view · j/n next · k/p previous · c new · / search
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (dialog || e.ctrlKey || e.metaKey || e.altKey || el?.closest('input, textarea, select, [contenteditable="true"], [role="dialog"]')) return;
+      const k = e.key.toLowerCase();
+      const views: Record<string, CalendarView> = { d: 'day', w: 'week', m: 'month', a: 'agenda' };
+      if (k === 't') go({ date: today });
+      else if (views[k]) router.push(`/calendar?view=${views[k]}&date=${date}`);
+      else if ((k === 'j' || k === 'n') && view !== 'agenda') step(1);
+      else if ((k === 'k' || k === 'p') && view !== 'agenda') step(-1);
+      else if (k === 'c') openCreate(newDate());
+      else if (k === '/') search.current?.focus();
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   return (
     <div className="flex gap-6">
@@ -81,7 +104,7 @@ export function CalendarApp(props: CalendarAppProps) {
       <div className="min-w-0 flex-1">
         <header className="mb-4 flex flex-wrap items-center gap-2 lg:gap-3">
           <div className="mr-auto min-w-0">
-            <p className="eyebrow hidden lg:block">Kalender</p>
+            <p className="eyebrow hidden lg:block">Kalender{view === 'week' || view === 'day' ? ` · KW ${isoWeek(date)}` : ''}</p>
             <h1 className="truncate font-display text-xl font-semibold lg:text-3xl">{title}</h1>
           </div>
           <div className="order-last flex w-full rounded-xl border border-line bg-white p-1 text-sm font-semibold lg:order-none lg:w-auto [&>button]:flex-1 lg:[&>button]:flex-none" role="tablist" aria-label="Ansicht">
@@ -97,8 +120,9 @@ export function CalendarApp(props: CalendarAppProps) {
               <button className="btn-outline btn-sm h-9 w-9 !p-0" aria-label="Weiter" onClick={() => step(1)}><ChevronRight size={16} /></button>
             </div>
           )}
+          <div className="hidden sm:block" title="Suchen (/)"><CalendarSearch ref={search} tz={tz} onOpen={openItem} /></div>
           <Link href="/ai" className="btn-outline hidden h-10 lg:inline-flex"><Sparkles size={16} className="text-ai" /> KI-Planung</Link>
-          <button className="btn-primary hidden h-10 lg:inline-flex" onClick={() => openCreate(view === 'day' ? date : date < today && view !== 'month' ? date : today)}>
+          <button className="btn-primary hidden h-10 lg:inline-flex" title="Neuer Termin (C)" onClick={() => openCreate(newDate())}>
             <Plus size={16} /> Neuer Termin
           </button>
           {/* phone: round + button like Google Calendar */}

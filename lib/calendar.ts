@@ -24,7 +24,7 @@ function eventToItems(e: CalendarEvent, cal: UserCalendar | undefined, from: str
   });
   if (!recurring) return [base(e.startAt, e.endAt, e.id, null)];
   return expandOccurrences(e.startAt, e.endAt, {
-    freq: e.recurrenceFreq!, interval: e.recurrenceInterval, until: e.recurrenceUntil, exdates: e.exdates,
+    freq: e.recurrenceFreq!, interval: e.recurrenceInterval, until: e.recurrenceUntil, exdates: e.exdates, weekdays: e.recurrenceDays,
   }, from, to, tz).map(o => base(o.startAt, o.endAt, `${e.id}@${o.date}`, o.date));
 }
 

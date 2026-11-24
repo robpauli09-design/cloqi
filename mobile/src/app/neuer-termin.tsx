@@ -48,6 +48,7 @@ export default function NeuerTermin() {
   const [category, setCategory] = useState('privat');
   const [reminder, setReminder] = useState('15');
   const [repeat, setRepeat] = useState('none');
+  const [repeatDays, setRepeatDays] = useState<number[]>([]);
   const [location, setLocation] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,12 +56,13 @@ export default function NeuerTermin() {
   useEffect(() => {
     api<{ from: string }>('/calendar?days=1').then(r => { setToday(r.from); if (!p.id) setDate(p.date || r.from); }).catch(e => setError(errorText(e)));
     if (p.id) {
-      api<{ title: string; date: string; start: string; end: string; category: string; location: string | null; reminderMinutes: number | null; repeat: string }>(
+      api<{ title: string; date: string; start: string; end: string; category: string; location: string | null; reminderMinutes: number | null; repeat: string; repeatDays?: number[] }>(
         `/events/${encodeURIComponent(p.id)}${p.occ ? `?occ=${p.occ}` : ''}`,
       ).then(d => {
         setTitle(d.title); setDate(d.date); setStart(d.start); setEnd(d.end); setCategory(d.category);
         setLocation(d.location ?? ''); setReminder(d.reminderMinutes === null ? 'none' : String(d.reminderMinutes));
         setRepeat(p.scope === 'single' ? 'none' : d.repeat === 'custom' ? 'weekly' : d.repeat);
+        setRepeatDays(d.repeatDays ?? []);
         setLoaded(true);
       }).catch(e => setError(errorText(e)));
     }
@@ -72,7 +74,7 @@ export default function NeuerTermin() {
     if (end <= start) return setError('Das Ende muss nach dem Beginn liegen.');
     setBusy(true);
     try {
-      const fields = { title: title.trim(), date, start, end, category, reminder, repeat, location: location.trim() || undefined };
+      const fields = { title: title.trim(), date, start, end, category, reminder, repeat, repeatDays: ['weekly', 'biweekly'].includes(repeat) ? repeatDays : [], location: location.trim() || undefined };
       if (editing) await api(`/events/${encodeURIComponent(p.id!)}`, { method: 'PATCH', body: { ...fields, scope: p.scope === 'single' ? 'single' : 'series', occurrenceDate: p.occ ?? null } });
       else await api('/events', { method: 'POST', body: fields });
       router.back();
@@ -113,6 +115,23 @@ export default function NeuerTermin() {
         <Select label="Kategorie" value={category} options={CATEGORIES} onChange={setCategory} />
         <Select label="Erinnerung" value={reminder} options={REMINDERS} onChange={setReminder} />
         <Select label="Wiederholung" value={repeat} options={REPEATS} onChange={setRepeat} />
+        {['weekly', 'biweekly'].includes(repeat) && (
+          <View style={{ gap: 6 }}>
+            <T variant="label">An diesen Tagen (optional, z. B. Training Mo + Mi)</T>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {WEEKDAYS_SHORT.map((l, i) => {
+                const on = repeatDays.includes(i + 1) || (!!date && weekday(date) === i + 1);
+                return (
+                  <Pressable key={l} accessibilityRole="checkbox" accessibilityState={{ checked: on }}
+                    onPress={() => setRepeatDays(ds => (ds.includes(i + 1) ? ds.filter(x => x !== i + 1) : [...ds, i + 1]))}
+                    style={[st.wd, on && st.wdOn]}>
+                    <T style={{ fontFamily: font.semibold, color: on ? colors.leafDark : colors.inkSoft }}>{l}</T>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        )}
         <Input label="Ort (optional)" value={location} onChangeText={setLocation} maxLength={200} />
         <ErrorBox text={error} />
         <Button title={editing ? 'Speichern' : 'Termin erstellen'} onPress={save} loading={busy} disabled={!title.trim() || !date} />
@@ -125,6 +144,8 @@ export default function NeuerTermin() {
 const i18nDay = (d: string, today: string) => (d === today ? 'Heute' : WEEKDAYS_SHORT[weekday(d) - 1]);
 
 const st = StyleSheet.create({
+  wd: { flex: 1, alignItems: 'center', paddingVertical: 9, borderRadius: 12, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white },
+  wdOn: { borderColor: colors.leaf, backgroundColor: colors.leafSoft },
   head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   day: { width: 54, alignItems: 'center', paddingVertical: 10, borderRadius: radius.md, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, gap: 2 },
   dayOn: { backgroundColor: colors.leafDark, borderColor: colors.leafDark },

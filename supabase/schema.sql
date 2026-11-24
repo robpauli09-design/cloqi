@@ -171,6 +171,7 @@ CREATE TABLE IF NOT EXISTS events (
   recurrence_freq      text CHECK (recurrence_freq IN ('daily', 'weekly', 'monthly', 'yearly')),
   recurrence_interval  smallint NOT NULL DEFAULT 1 CHECK (recurrence_interval BETWEEN 1 AND 99),
   recurrence_until     date,
+  recurrence_days      text,                              -- weekly on weekdays, e.g. '1,3,5' (Mo, Mi, Fr)
   exdates              jsonb NOT NULL DEFAULT '[]'::jsonb,
   series_id            uuid REFERENCES events(id) ON DELETE CASCADE,   -- edited single occurrence of a series
   -- external sync

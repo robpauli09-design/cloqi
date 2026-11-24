@@ -32,6 +32,14 @@ export async function readEventForm(user: User, form: FormData): Promise<EventIn
     const rule = RECURRENCE_PRESETS.find(p => p.value === preset)?.rule ?? null;
     if (rule) { recurrenceFreq = rule.freq; recurrenceInterval = rule.interval; }
   }
+  // weekly on chosen weekdays (checkboxes repeatDays=1…7); the event's own weekday is always included
+  let recurrenceDays: number[] | null = null;
+  if (recurrenceFreq === 'weekly') {
+    const picked = form.getAll('repeatDays').map(Number).filter(d => d >= 1 && d <= 7);
+    const own = ((new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7) + 1;
+    const set = [...new Set([...picked, ...(picked.length ? [own] : [])])].sort((a, b) => a - b);
+    recurrenceDays = set.length > 1 ? set : null;
+  }
   const until = String(form.get('until') ?? '');
   if (recurrenceFreq && until && (!isValidDate(until) || until < day)) throw new InputError('Das Ende der Wiederholung ist ungültig.');
 
@@ -44,7 +52,7 @@ export async function readEventForm(user: User, form: FormData): Promise<EventIn
     startAt: zonedToUtc(day, start, user.timezone).toISOString(),
     endAt: zonedToUtc(day, end, user.timezone).toISOString(),
     category: category(form), description: optionalText(form, 'description', 2000), location: optionalText(form, 'location', 200),
-    reminderMinutes, recurrenceFreq, recurrenceInterval, recurrenceUntil: recurrenceFreq && until ? until : null,
+    reminderMinutes, recurrenceFreq, recurrenceInterval, recurrenceUntil: recurrenceFreq && until ? until : null, recurrenceDays,
   };
 }
 
@@ -127,6 +135,7 @@ export interface EventDetails {
   id: string; title: string; description: string | null; date: string; start: string; end: string; allDay: boolean;
   category: CalendarEvent['category']; calendarId: string | null; location: string | null; reminderMinutes: number | null;
   repeat: string; repeatInterval: number; repeatUnit: string; until: string | null; source: string; recurring: boolean;
+  repeatDays: number[];
 }
 
 /** Event fields for an edit form (in the user's time zone). */
@@ -142,6 +151,6 @@ export async function eventDetailsFor(user: User, id: string, occurrenceDate: st
     id: e.id, title: e.title, description: e.description, date: occurrenceDate ?? s.date, start: s.time, end: en.time, allDay: e.allDay,
     category: e.category, calendarId: e.calendarId, location: e.location, reminderMinutes: e.reminderMinutes,
     repeat: preset, repeatInterval: e.recurrenceInterval, repeatUnit: e.recurrenceFreq ?? 'weekly', until: e.recurrenceUntil,
-    source: e.source, recurring: e.recurrenceFreq !== null,
+    source: e.source, recurring: e.recurrenceFreq !== null, repeatDays: e.recurrenceDays ?? [],
   };
 }
