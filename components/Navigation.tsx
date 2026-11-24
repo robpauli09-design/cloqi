@@ -2,17 +2,20 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, BookOpenText, CalendarDays, Flower2, Home, Link2, MessageCircleHeart, Sun, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BookOpen, BookOpenText, CalendarDays, Flower2, Home, Link2, MessageCircleHeart, PanelLeftClose, PanelLeftOpen, Sun, UserRound } from 'lucide-react';
 import { AccountMenu } from './AccountMenu';
 import { Logo } from './Logo';
 import { Mascot, type MascotName } from './Mascot';
+import { SIDEBAR_COOKIE } from '@/lib/sidebar';
 
+// CLOQI AI first – it is the heart of the app
 const NAV = [
+  { href: '/ai', label: 'CLOQI AI', icon: MessageCircleHeart },
   { href: '/dashboard', label: 'Home', icon: Home },
   { href: '/calendar', label: 'Kalender', icon: CalendarDays },
   { href: '/learn', label: 'Learn', icon: BookOpen },
   { href: '/life', label: 'Life', icon: Sun },
-  { href: '/ai', label: 'CLOQI AI', icon: MessageCircleHeart },
   { href: '/vault', label: 'Wissen', icon: BookOpenText },
   { href: '/profile', label: 'Profil', icon: UserRound },
 ];
@@ -24,35 +27,72 @@ function useItems(cycle: boolean) {
   return cycle ? [...main, CYCLE] : main;
 }
 
-export function Sidebar({ name, email, mascot, cycle }: { name: string; email: string; mascot: MascotName; cycle: boolean }) {
+type NavProps = { name: string; email: string; mascot: MascotName; cycle: boolean };
+
+/** Desktop frame: the sidebar can be collapsed to an icon rail (like ChatGPT/Claude); remembered in a cookie. */
+export function AppFrame({ nav, collapsed: initial, children }: { nav: NavProps; collapsed: boolean; children: React.ReactNode }) {
+  const [collapsed, setCollapsed] = useState(initial);
+  useEffect(() => {
+    document.cookie = `${SIDEBAR_COOKIE}=${collapsed ? '1' : '0'}; path=/; max-age=31536000; samesite=lax`;
+  }, [collapsed]);
+  // Ctrl/Cmd + B toggles the sidebar
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'b') { e.preventDefault(); setCollapsed(c => !c); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+  return (
+    <div className={`min-h-dvh transition-[padding] duration-200 ${collapsed ? 'lg:pl-[72px]' : 'lg:pl-[248px]'}`}>
+      <Sidebar {...nav} collapsed={collapsed} onToggle={() => setCollapsed(c => !c)} />
+      {children}
+    </div>
+  );
+}
+
+function Sidebar({ name, email, mascot, cycle, collapsed, onToggle }: NavProps & { collapsed: boolean; onToggle(): void }) {
   const path = usePathname();
   const items = useItems(cycle);
+  const toggleLabel = collapsed ? 'Seitenleiste ausklappen' : 'Seitenleiste einklappen';
+  const ToggleIcon = collapsed ? PanelLeftOpen : PanelLeftClose;
+  const toggleBtn = (
+    <button type="button" onClick={onToggle} aria-label={toggleLabel} title={`${toggleLabel} (Strg+B)`} aria-expanded={!collapsed}
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-paper/70 transition hover:bg-white/10 hover:text-paper">
+      <ToggleIcon size={19} />
+    </button>
+  );
+  const row = `flex items-center gap-3 rounded-xl py-2.5 text-sm font-semibold transition ${collapsed ? 'justify-center px-0' : 'px-3'}`;
   return (
-    <aside className="fixed inset-y-0 left-0 z-40 hidden w-[248px] flex-col bg-leaf-deep px-4 py-6 text-paper lg:flex">
-      <Link href="/dashboard" className="px-2"><Logo light size="sm" /></Link>
+    <aside className={`fixed inset-y-0 left-0 z-40 hidden flex-col bg-leaf-deep py-6 text-paper transition-[width] duration-200 lg:flex
+      ${collapsed ? 'w-[72px] px-3' : 'w-[248px] px-4'}`}>
+      {collapsed
+        ? <div className="flex justify-center">{toggleBtn}</div>
+        : <div className="flex items-center justify-between gap-2"><Link href="/dashboard" className="px-2"><Logo light size="sm" /></Link>{toggleBtn}</div>}
       <nav className="mt-8 flex flex-col gap-1" aria-label="Hauptnavigation">
         {items.map(({ href, label, icon: Icon }) => {
           const active = path === href || path.startsWith(`${href}/`);
           return (
-            <Link key={href} href={href} aria-current={active ? 'page' : undefined}
-              className={`group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition
-                ${active ? 'bg-lime text-leaf-deep shadow-sm' : 'text-paper/75 hover:bg-white/10 hover:text-paper'}`}>
-              <Icon size={19} strokeWidth={active ? 2.4 : 2} />
-              {label}
+            <Link key={href} href={href} aria-current={active ? 'page' : undefined} aria-label={collapsed ? label : undefined} title={collapsed ? label : undefined}
+              className={`group ${row} ${active ? 'bg-lime text-leaf-deep shadow-sm' : 'text-paper/75 hover:bg-white/10 hover:text-paper'}`}>
+              <Icon size={19} strokeWidth={active ? 2.4 : 2} className="shrink-0" />
+              {!collapsed && label}
             </Link>
           );
         })}
       </nav>
-      <Link href="/connect" className={`mt-4 flex items-center gap-3 rounded-xl border border-white/15 px-3 py-2.5 text-sm font-semibold transition
-        ${path === '/connect' ? 'bg-white/15 text-paper' : 'text-paper/75 hover:bg-white/10 hover:text-paper'}`}>
-        <Link2 size={18} /> Kalender verbinden
+      <Link href="/connect" aria-label={collapsed ? 'Kalender verbinden' : undefined} title={collapsed ? 'Kalender verbinden' : undefined}
+        className={`mt-4 border border-white/15 ${row} ${path === '/connect' ? 'bg-white/15 text-paper' : 'text-paper/75 hover:bg-white/10 hover:text-paper'}`}>
+        <Link2 size={18} className="shrink-0" />{!collapsed && 'Kalender verbinden'}
       </Link>
       <div className="mt-auto">
-        <div className="relative mb-3 overflow-hidden rounded-2xl bg-white/10 p-3">
-          <Mascot name={mascot} variant="bust" size={72} className="absolute -bottom-3 -right-2 opacity-95" />
-          <p className="max-w-[110px] text-xs font-medium leading-snug text-paper/85">Ich halte deinen Tag im Blick.</p>
-        </div>
-        <AccountMenu name={name} email={email} />
+        {!collapsed && (
+          <div className="relative mb-3 overflow-hidden rounded-2xl bg-white/10 p-3">
+            <Mascot name={mascot} variant="bust" size={72} className="absolute -bottom-3 -right-2 opacity-95" />
+            <p className="max-w-[110px] text-xs font-medium leading-snug text-paper/85">Ich halte deinen Tag im Blick.</p>
+          </div>
+        )}
+        <AccountMenu name={name} email={email} compact={collapsed} />
       </div>
     </aside>
   );

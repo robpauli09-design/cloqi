@@ -66,6 +66,9 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
   const [files, setFiles] = useState<Attachment[]>([]);
   const [menu, setMenu] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // phones/tablets get "Foto aufnehmen"; mouse-and-keyboard computers only upload
+  const [touch, setTouch] = useState(false);
+  useEffect(() => { setTouch(window.matchMedia('(pointer: coarse)').matches); }, []);
   const [threads, setThreads] = useState<Thread[] | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   const [pending, start] = useTransition();
@@ -282,14 +285,15 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-9.5rem)] max-w-3xl flex-col lg:min-h-[calc(100dvh-4.5rem)]">
-      <header className="flex items-center gap-1 border-b border-line pb-3">
-        <h1 className="flex-1 font-display text-lg font-semibold">CLOQI AI{aiEnabled ? '' : <span className="ml-2 text-xs font-medium text-ink-faint">Basis-Modus</span>}</h1>
+      {/* desktop: no title or line – just the icons in the top right corner */}
+      <header className="flex items-center gap-1 border-b border-line pb-3 lg:fixed lg:right-6 lg:top-5 lg:z-30 lg:border-0 lg:pb-0">
+        <h1 className="flex-1 font-display text-lg font-semibold lg:sr-only">CLOQI AI{aiEnabled ? '' : <span className="ml-2 text-xs font-medium text-ink-faint">Basis-Modus</span>}</h1>
         <Link href="/vault" className={iconBtn} aria-label="Wissen" title="Wissen"><BookOpenText size={19} /></Link>
         {aiEnabled && <button className={iconBtn} aria-label="Chat-Verlauf" title="Chat-Verlauf" onClick={openHistory}><History size={19} /></button>}
         {aiEnabled && messages.length > 0 && <button className={iconBtn} aria-label="Neuer Chat" title="Neuer Chat" onClick={newChat}><SquarePen size={19} /></button>}
       </header>
 
-      <div className={`mt-4 flex-1 space-y-4 ${messages.length === 0 ? 'flex flex-col items-center justify-center' : ''}`}>
+      <div className={`mt-4 flex-1 space-y-4 lg:mt-0 ${messages.length === 0 ? 'flex flex-col items-center justify-center' : ''}`}>
         {messages.length === 0 && (
           <div className="flex w-full max-w-sm animate-rise flex-col items-center text-center">
             <MascotAvatar name={mascot} size={56} />
@@ -364,11 +368,17 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
       <div className="sticky bottom-28 mt-6 lg:bottom-4">
         {menu && (
           <div className="absolute bottom-full left-0 mb-2 w-56 animate-pop rounded-2xl border border-line bg-white p-1.5 shadow-lift" role="menu">
-            {[
-              { label: 'Foto aufnehmen', icon: Camera, ref: camera },
-              { label: 'Foto auswählen', icon: ImageIcon, ref: photos },
-              { label: 'Datei hochladen', icon: Paperclip, ref: docs },
-            ].map(({ label, icon: Icon, ref }) => (
+            {(touch
+              ? [
+                { label: 'Foto aufnehmen', icon: Camera, ref: camera },
+                { label: 'Foto auswählen', icon: ImageIcon, ref: photos },
+                { label: 'Datei hochladen', icon: Paperclip, ref: docs },
+              ]
+              // computers have no camera to speak of – just upload
+              : [
+                { label: 'Bild hochladen', icon: ImageIcon, ref: photos },
+                { label: 'PDF oder Datei hochladen', icon: Paperclip, ref: docs },
+              ]).map(({ label, icon: Icon, ref }) => (
               <button key={label} role="menuitem" onClick={() => ref.current?.click()}
                 className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium hover:bg-leaf-soft hover:text-leaf-deep">
                 <Icon size={17} className="text-leaf-dark" />{label}
@@ -410,7 +420,7 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
             </div>
           ) : (
             <form onSubmit={e => { e.preventDefault(); send(text); }} className="flex items-end gap-1.5">
-              <button type="button" onClick={() => setMenu(m => !m)} disabled={!aiEnabled} aria-label="Foto oder Datei hinzufügen" aria-expanded={menu}
+              <button type="button" onClick={() => setMenu(m => !m)} disabled={!aiEnabled} aria-label={touch ? 'Foto oder Datei hinzufügen' : 'Bild oder Datei hochladen'} title={touch ? undefined : 'Bild oder Datei hochladen'} aria-expanded={menu}
                 className={`grid h-10 w-10 shrink-0 place-items-center rounded-full text-ink-soft transition hover:bg-paper disabled:opacity-40 ${menu ? 'rotate-45 bg-paper' : ''}`}>
                 <Plus size={21} />
               </button>
