@@ -59,10 +59,10 @@ async function readAttachment(file: File): Promise<Attachment> {
   return { name: file.name.replace(/\.[^.]+$/, '') + '.jpg', mime: 'image/jpeg', data: url.split(',')[1], preview: url };
 }
 
-export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: string; aiEnabled: boolean }) {
+export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotName; name: string; aiEnabled: boolean; initialText?: string }) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
-  const [text, setText] = useState('');
+  const [text, setText] = useState(initialText ?? '');
   const [files, setFiles] = useState<Attachment[]>([]);
   const [menu, setMenu] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -125,6 +125,8 @@ export function Chat({ mascot, name, aiEnabled }: { mascot: MascotName; name: st
   }, [messages.length]);
   // coming back to the AI tab: reopen the current conversation; if CLOQI is still answering, wait for it
   useEffect(() => {
+    // opened from a suggestion (Home): a fresh chat with the text ready to send
+    if (initialText) { remember(null); router.replace('/ai'); input.current?.focus(); return; }
     const id = remembered();
     if (!id) return;
     let alive = true;

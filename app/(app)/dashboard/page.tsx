@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { AlertTriangle, ArrowRight, BookOpen, CalendarClock, Clock3, Dumbbell, Flame, ListTodo, MapPin, School, Sparkles, Trophy } from 'lucide-react';
+import { AlertTriangle, ArrowRight, ArrowUp, BookOpen, CalendarClock, CalendarPlus, Link2, MessageCircleHeart, Sun, Clock3, Dumbbell, Flame, ListTodo, MapPin, School, Sparkles, Trophy } from 'lucide-react';
 import { requireReadyUser } from '@/lib/auth';
+import { listThreads } from '@/lib/repo';
 import { buildDashboard } from '@/lib/insights';
 import { getProgress } from '@/lib/stats';
 import { formatDateDe, relativeDayDe, utcToZoned, WEEKDAYS_SHORT_DE } from '@/lib/time';
@@ -18,9 +19,24 @@ function greeting(hour: number) {
   return 'Guten Abend';
 }
 
-export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ welcome?: string }> }) {
+// first chat ideas – tapping one opens CLOQI AI with the text ready to send
+const FIRST = [
+  { icon: CalendarPlus, label: 'Test eintragen', text: 'Ich habe nächsten Donnerstag einen Mathe-Test, Kapitel 4 und 5.' },
+  { icon: Dumbbell, label: 'Training eintragen', text: 'Ich habe jeden Dienstag und Donnerstag von 18 bis 19:30 Training.' },
+  { icon: Sun, label: 'Was steht morgen an?', text: 'Was steht morgen an?' },
+];
+const SETUP: Record<string, { label: string; href: string }> = {
+  webuntis: { label: 'WebUntis verbinden', href: '/connect#webuntis' },
+  import: { label: 'Stundenplan importieren', href: '/connect#import' },
+  manual: { label: 'Stundenplan erstellen', href: '/connect#manual' },
+  kalender: { label: 'Kalender verbinden', href: '/connect' },
+};
+
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ welcome?: string; setup?: string }> }) {
   const user = await requireReadyUser();
-  const { welcome } = await searchParams;
+  const { welcome, setup } = await searchParams;
+  const firstChat = (await listThreads(user.id, 1)).length === 0;
+  const next = setup ? SETUP[setup] : undefined;
   const tz = user.timezone;
   const d = await buildDashboard(user);
   const p = await getProgress(user);
@@ -32,6 +48,41 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   return (
     <div className="space-y-6">
+      {/* First steps (on top until the first chat): get new users into the CLOQI AI chat */}
+      {firstChat && (
+        <section className="card card-pad border-2 border-leaf/30">
+          <div className="flex items-center gap-3">
+            <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-leaf-soft text-leaf-dark"><MessageCircleHeart size={22} /></span>
+            <div>
+              <h2 className="font-display text-xl font-semibold">Schreib CLOQI deine erste Nachricht</h2>
+              <p className="text-sm text-ink-soft">Sag einfach, was ansteht – Test, Hausübung, Training. CLOQI trägt es ein und plant drumherum.</p>
+            </div>
+          </div>
+          <Link href="/ai" className="mt-4 flex items-center gap-2 rounded-[22px] border border-line bg-white p-2 pl-4 text-sm text-ink-faint shadow-sm transition hover:border-leaf/50">
+            <span className="flex-1">Schreib CLOQI …</span>
+            <span className="grid h-9 w-9 place-items-center rounded-full bg-leaf-dark text-white"><ArrowUp size={18} /></span>
+          </Link>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {FIRST.map(({ icon: Icon, label, text }) => (
+              <Link key={label} href={`/ai?q=${encodeURIComponent(text)}`}
+                className="flex items-center gap-2 rounded-full border border-line bg-white/70 px-3.5 py-2 text-sm font-medium text-ink-soft transition hover:border-leaf/50 hover:text-ink">
+                <Icon size={15} className="text-leaf-dark" />{label}
+              </Link>
+            ))}
+          </div>
+          {next && (
+            <Link href={next.href} className="mt-4 flex items-center gap-2 border-t border-line pt-3 text-sm font-semibold text-leaf-dark">
+              <Link2 size={16} /> Danach: {next.label} <ArrowRight size={15} />
+            </Link>
+          )}
+        </section>
+      )}
+      {!firstChat && next && (
+        <Link href={next.href} className="card card-pad flex items-center gap-3 text-sm font-semibold text-leaf-dark">
+          <Link2 size={18} /> Nächster Schritt: {next.label} <ArrowRight size={15} className="ml-auto" />
+        </Link>
+      )}
+
       {/* Greeting */}
       <section className="card relative overflow-hidden bg-gradient-to-br from-white via-white to-leaf-soft">
         <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full bg-lime/20 blur-2xl" />

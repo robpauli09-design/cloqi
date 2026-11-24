@@ -10,6 +10,7 @@ import {
 } from 'expo-audio';
 import { api, apiStream, errorText, type ChatMessage } from '@/api';
 import { useAuth } from '@/auth';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChatMarkdown } from '@/components/ChatMarkdown';
 import { Mascot } from '@/components/Mascot';
 import { T } from '@/components/ui';
@@ -53,6 +54,12 @@ export default function Ai() {
   useEffect(() => {
     api<{ enabled: boolean }>('/ai').then(r => setEnabled(r.enabled)).catch(() => {});
   }, []);
+  // opened from a suggestion on the Heute tab: the text is ready to send
+  const { q } = useLocalSearchParams<{ q?: string }>();
+  const router = useRouter();
+  useEffect(() => {
+    if (typeof q === 'string' && q) { setText(q.slice(0, 500)); router.setParams({ q: '' }); }
+  }, [q, router]);
   // Stick to the bottom like ChatGPT: at the bottom, growing answers keep you there; scroll up and it stays put.
   const stick = useRef(true);
   const lastY = useRef(0);

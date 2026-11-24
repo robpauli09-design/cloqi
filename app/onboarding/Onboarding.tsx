@@ -23,18 +23,17 @@ const AREAS = [
   { value: 'privat', label: 'Private Termine', icon: Heart },
 ];
 const TIMETABLE = [
-  { value: '/connect#webuntis', label: 'WebUntis verbinden', hint: 'Einfach den normalen WebUntis-Link einfügen' },
-  { value: '/connect#import', label: 'Anderen Stundenplan importieren', hint: 'ICS- oder CSV-Datei' },
-  { value: '/connect#manual', label: 'Stundenplan manuell erstellen', hint: 'Fach, Tag, Uhrzeit' },
-  { value: '', label: 'Später einrichten', hint: 'Geht jederzeit unter „Kalender verbinden“' },
+  { value: 'webuntis', label: 'WebUntis verbinden', hint: 'Einfach den normalen WebUntis-Link einfügen' },
+  { value: 'import', label: 'Anderen Stundenplan importieren', hint: 'ICS- oder CSV-Datei' },
+  { value: 'manual', label: 'Stundenplan manuell erstellen', hint: 'Fach, Tag, Uhrzeit' },
 ];
 
 const MESSAGES = [
   'Hey! Schön, dass du da bist!',
   'Was machst du gerade? Dann kann ich dich besser unterstützen.',
   'Wie sieht dein Alltag aus?',
-  'Verbinde deinen Stundenplan – dann musst du nichts abtippen.',
-  'Verbinde deine Kalender, damit alles an einem Ort ist.',
+  'Hast du einen Stundenplan? Wenn nicht, einfach überspringen.',
+  'Nutzt du schon einen Kalender? Kein Problem, wenn nicht!',
   'Fertig! CLOQI übernimmt.',
 ];
 
@@ -43,7 +42,10 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
   const [name, setName] = useState('');
   const [type, setType] = useState('schueler');
   const [areas, setAreas] = useState<string[]>(['schule', 'training', 'privat']);
-  const [next, setNext] = useState('/connect#webuntis');
+  // nothing is preselected – many students don't use a calendar yet; both steps can be skipped
+  const [timetable, setTimetable] = useState('');
+  const [calendar, setCalendar] = useState('');
+  const setup = timetable || (calendar ? 'kalender' : '');
   const [chosen, setMascot] = useState<MascotName>('cloki');
   const [gender, setGender] = useState<Gender | ''>('');
   const mascot = mascotFor(gender || null, chosen);
@@ -64,7 +66,7 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
         <input type="hidden" name="name" value={name} />
         <input type="hidden" name="userType" value={type} />
         {areas.map(a => <input key={a} type="hidden" name="areas" value={a} />)}
-        <input type="hidden" name="next" value={next} />
+        <input type="hidden" name="setup" value={setup} />
         <input type="hidden" name="mascot" value={mascot} />
         <input type="hidden" name="gender" value={gender} />
 
@@ -118,27 +120,29 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
               <h1 className="h1">Verbinde deinen Stundenplan.</h1>
               <div className="mt-5 grid gap-3">
                 {TIMETABLE.map(t => (
-                  <Choice key={t.label} active={next === t.value} onClick={() => setNext(t.value)} icon={<CalendarDays size={20} />} label={t.label} hint={t.hint} />
+                  <Choice key={t.label} active={timetable === t.value} onClick={() => setTimetable(v => (v === t.value ? '' : t.value))} icon={<CalendarDays size={20} />} label={t.label} hint={t.hint} />
                 ))}
               </div>
             </>
           )}
           {step === 4 && (
             <>
-              <h1 className="h1">Verbinde deine Kalender.</h1>
-              <p className="muted mt-1">Du entscheidest später genau, welche Termine übertragen werden.</p>
+              <h1 className="h1">Nutzt du schon einen Kalender?</h1>
+              <p className="muted mt-1">Wenn nicht, überspring diesen Schritt einfach – CLOQI ist dann dein Kalender.</p>
               <div className="mt-5 grid gap-3">
-                <Choice active={false} onClick={() => setNext('/connect')} icon={<span className="font-bold text-info">G</span>} label="Google Kalender" hint={googleReady ? 'Nach dem Abschluss verbinden' : 'Auf diesem Server noch nicht eingerichtet'} />
-                <Choice active={false} onClick={() => setNext('/connect')} icon={<span className="font-bold text-ink">A</span>} label="Apple Kalender" hint="Abonnierbarer CLOQI-Kalender für iPhone, iPad & Mac" />
-                <Choice active={false} onClick={() => setNext('/connect')} icon={<span className="font-bold text-info">O</span>} label="Outlook" hint={outlookReady ? 'Nach dem Abschluss verbinden' : 'Auf diesem Server noch nicht eingerichtet'} />
-                <p className="text-xs text-ink-faint">Tipp: Alle Verbindungen findest du jederzeit unter „Kalender verbinden“. {next === '/connect' && 'Ich bringe dich nach dem Abschluss direkt dorthin.'}</p>
+                {[
+                  { v: 'google', icon: <span className="font-bold text-info">G</span>, label: 'Google Kalender', hint: googleReady ? 'Nach dem Abschluss verbinden' : 'Auf diesem Server noch nicht eingerichtet' },
+                  { v: 'apple', icon: <span className="font-bold text-ink">A</span>, label: 'Apple Kalender', hint: 'Abonnierbarer CLOQI-Kalender für iPhone, iPad & Mac' },
+                  { v: 'outlook', icon: <span className="font-bold text-info">O</span>, label: 'Outlook', hint: outlookReady ? 'Nach dem Abschluss verbinden' : 'Auf diesem Server noch nicht eingerichtet' },
+                ].map(c => <Choice key={c.v} active={calendar === c.v} onClick={() => setCalendar(v => (v === c.v ? '' : c.v))} icon={c.icon} label={c.label} hint={c.hint} />)}
+                <p className="text-xs text-ink-faint">Alle Verbindungen findest du jederzeit unter „Kalender verbinden“.</p>
               </div>
             </>
           )}
           {step === 5 && (
             <div className="text-center">
               <h1 className="h1">Fertig! CLOQI übernimmt.</h1>
-              <p className="muted mx-auto mt-2 max-w-md">Ich habe deinen Kalender vorbereitet. {next ? 'Als Nächstes verbinden wir deine Daten.' : 'Du kannst sofort loslegen.'}</p>
+              <p className="muted mx-auto mt-2 max-w-md">Ich habe deinen Kalender vorbereitet. Schreib mir einfach, was ansteht – ich trage es ein und plane drumherum.{setup ? ' Das Verbinden zeige ich dir gleich auf deiner Startseite.' : ''}</p>
             </div>
           )}
 
@@ -146,7 +150,17 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
             <button type="button" className="btn-ghost" onClick={() => setStep(s => Math.max(0, s - 1))} disabled={step === 0}>
               <ArrowLeft size={16} /> Zurück
             </button>
-            {step < last ? (
+            {step === 3 || step === 4 ? (
+              <div className="flex items-center gap-2">
+                <button type="button" className="btn-ghost"
+                  onClick={() => { if (step === 3) setTimetable(''); else setCalendar(''); setStep(s => s + 1); }}>
+                  Überspringen
+                </button>
+                <button type="button" className="btn-primary" onClick={() => setStep(s => s + 1)} disabled={step === 3 ? !timetable : !calendar}>
+                  Weiter <ArrowRight size={16} />
+                </button>
+              </div>
+            ) : step < last ? (
               <button type="button" className="btn-primary" onClick={() => setStep(s => s + 1)} disabled={step === 0 && (!name.trim() || !gender)}>
                 Weiter <ArrowRight size={16} />
               </button>
@@ -155,11 +169,6 @@ export function Onboarding({ googleReady, outlookReady }: { googleReady: boolean
             )}
           </div>
         </div>
-        {step === 3 || step === 4 ? (
-          <button type="button" onClick={() => { setNext(''); setStep(s => s + 1); }} className="mx-auto mt-4 block text-sm font-semibold text-ink-soft hover:text-leaf-dark">
-            Später einrichten
-          </button>
-        ) : null}
       </form>
     </main>
   );

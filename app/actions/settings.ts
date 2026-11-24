@@ -42,8 +42,9 @@ export async function completeOnboarding(form: FormData) {
     gender: gender in GENDER_LABELS ? gender as Gender : null,
     prefs: { ...user.prefs, mascot: mascotFor(gender in GENDER_LABELS ? gender as Gender : null, mascot) },
   });
-  const next = String(form.get('next') ?? '');
-  redirect(['/connect', '/connect#webuntis', '/connect#manual', '/connect#import'].includes(next) ? next : '/dashboard?welcome=1');
+  // always start on Home; a chosen connection is offered there as the next step
+  const setup = String(form.get('setup') ?? '');
+  redirect(`/dashboard?welcome=1${['webuntis', 'import', 'manual', 'kalender'].includes(setup) ? `&setup=${setup}` : ''}`);
 }
 
 // ---------- profile & preferences ----------

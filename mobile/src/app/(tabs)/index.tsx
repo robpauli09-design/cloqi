@@ -46,10 +46,19 @@ function useApi<T>(path: string) {
   return { data, error, refreshing, reload };
 }
 
+// first chat ideas (same as the website's Home) – tapping one opens CLOQI AI with the text ready to send
+const FIRST: { icon: React.ComponentProps<typeof Ionicons>['name']; label: string; text: string }[] = [
+  { icon: 'calendar-outline', label: 'Test eintragen', text: 'Ich habe nächsten Donnerstag einen Mathe-Test, Kapitel 4 und 5.' },
+  { icon: 'barbell-outline', label: 'Training eintragen', text: 'Ich habe jeden Dienstag und Donnerstag von 18 bis 19:30 Training.' },
+  { icon: 'sunny-outline', label: 'Was steht morgen an?', text: 'Was steht morgen an?' },
+];
+
 function TodayView() {
   const { user } = useAuth();
   const router = useRouter();
   const { data, error, refreshing, reload } = useApi<Today>('/today');
+  const chats = useApi<{ threads: unknown[] }>('/ai/threads');
+  const openAi = (q?: string) => router.push({ pathname: '/ai', params: q ? { q } : {} });
   return (
     <ScrollView contentContainerStyle={st.scroll} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => reload(true)} tintColor={colors.leaf} />}>
       <View style={st.hero}>
@@ -61,6 +70,30 @@ function TodayView() {
         <Mascot name={user?.mascot} variant="bust" size={96} />
       </View>
       <ErrorBox text={error} />
+
+      {chats.data && chats.data.threads.length === 0 && (
+        <Card style={{ gap: 12, borderWidth: 2, borderColor: '#7CC51B55' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={st.firstIcon}><Ionicons name="chatbubble-ellipses-outline" size={22} color={colors.leafDark} /></View>
+            <View style={{ flex: 1, gap: 2 }}>
+              <T variant="h2">Schreib CLOQI deine erste Nachricht</T>
+              <T variant="muted">Sag einfach, was ansteht – CLOQI trägt es ein und plant drumherum.</T>
+            </View>
+          </View>
+          <Pressable onPress={() => openAi()} accessibilityRole="button" accessibilityLabel="CLOQI AI öffnen" style={st.fakeInput}>
+            <T variant="muted" style={{ flex: 1 }}>Schreib CLOQI …</T>
+            <View style={st.fakeSend}><Ionicons name="arrow-up" size={18} color={colors.white} /></View>
+          </Pressable>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            {FIRST.map(f => (
+              <Pressable key={f.label} onPress={() => openAi(f.text)} accessibilityRole="button" style={st.firstChip}>
+                <Ionicons name={f.icon} size={14} color={colors.leafDark} />
+                <T style={{ fontFamily: font.medium, fontSize: 13 }}>{f.label}</T>
+              </Pressable>
+            ))}
+          </View>
+        </Card>
+      )}
 
       {data && (
         <View style={st.stats}>
@@ -225,6 +258,10 @@ function CalendarView({ mode }: { mode: 'tag' | 'liste' }) {
 
 const st = StyleSheet.create({
   scroll: { padding: 16, gap: 14, paddingBottom: 120 },
+  firstIcon: { width: 44, height: 44, borderRadius: 14, backgroundColor: colors.leafSoft, alignItems: 'center', justifyContent: 'center' },
+  fakeInput: { flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, borderRadius: 22, paddingLeft: 16, padding: 6 },
+  fakeSend: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.leafDark, alignItems: 'center', justifyContent: 'center' },
+  firstChip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   stats: { flexDirection: 'row', gap: 8 },
   stat: { flex: 1, backgroundColor: colors.white, borderRadius: radius.lg, padding: 12, gap: 2, ...shadow },
