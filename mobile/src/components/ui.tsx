@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  AccessibilityInfo, ActivityIndicator, Animated, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
   type PressableProps, type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -114,6 +114,26 @@ export function Select<V extends string>({ label, value, options, onChange, plac
 
 export function Pill({ children, color = colors.leafDark, bg = colors.leafSoft }: { children: React.ReactNode; color?: string; bg?: string }) {
   return <View style={[s.pill, { backgroundColor: bg }]}><Text style={[s.pillText, { color }]}>{children}</Text></View>;
+}
+
+/** Skeleton placeholder (same tones as the website): gently pulses while data loads, still with "Bewegung reduzieren". */
+export function Bone({ w = '100%', h = 14, r = 8, style }: { w?: number | `${number}%`; h?: number; r?: number; style?: StyleProp<ViewStyle> }) {
+  const pulse = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    let loop: Animated.CompositeAnimation | null = null;
+    let alive = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then(reduce => {
+      if (!alive || reduce) return;
+      loop = Animated.loop(Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.55, duration: 700, useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 700, useNativeDriver: true }),
+      ]));
+      loop.start();
+    });
+    return () => { alive = false; loop?.stop(); };
+  }, [pulse]);
+  return <Animated.View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+    style={[{ width: w, height: h, borderRadius: r, backgroundColor: '#EEECE4', opacity: pulse }, style]} />;
 }
 
 export function ErrorBox({ text }: { text: string | null }) {

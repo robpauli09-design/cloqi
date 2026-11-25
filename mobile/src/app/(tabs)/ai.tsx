@@ -13,7 +13,7 @@ import { useAuth } from '@/auth';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChatMarkdown } from '@/components/ChatMarkdown';
 import { Mascot } from '@/components/Mascot';
-import { T } from '@/components/ui';
+import { Bone, T } from '@/components/ui';
 import { MAX_FILES, pickFiles, pickPhotos, readBase64, takePhoto, type Attachment } from '@/media';
 import { colors, font, radius, shadow } from '@/theme';
 
@@ -359,7 +359,7 @@ export default function Ai() {
               <Ionicons name="close" size={24} color={colors.inkSoft} />
             </Pressable>
           </View>
-          {!history ? <ActivityIndicator color={colors.leaf} style={{ marginTop: 24 }} /> : (
+          {!history ? <View style={{ padding: 16, gap: 18 }}>{[0, 1, 2, 3, 4].map(i => <View key={i} style={{ gap: 6 }}><Bone w={(['70%', '55%', '80%'] as const)[i % 3]} h={14} /><Bone w="30%" h={10} /></View>)}</View> : (
             <FlatList
               data={history}
               keyExtractor={t => t.id}

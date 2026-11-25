@@ -11,7 +11,7 @@ import { DayView } from '@/components/DayView';
 import { onSynced, syncSoon } from '@/sync';
 import { ItemRow } from '@/components/ItemRow';
 import { Mascot } from '@/components/Mascot';
-import { Card, ErrorBox, Pill, Segmented, T } from '@/components/ui';
+import { Bone, Card, ErrorBox, Pill, Segmented, T } from '@/components/ui';
 import { colors, font, itemMark, MARK_STYLE, radius, shadow } from '@/theme';
 
 type View_ = 'heute' | 'tag' | 'liste';
@@ -99,7 +99,7 @@ function TodayView() {
         <View style={{ flex: 1, gap: 4 }}>
           <T variant="eyebrow">{data ? formatLong(data.today) : ' '}</T>
           <T variant="h1">{greeting()}, {user?.name || 'du'}!</T>
-          {data?.insight ? <T variant="muted">{data.insight}</T> : null}
+          {data?.insight ? <T variant="muted">{data.insight}</T> : !data && !error ? <Bone w="85%" h={13} style={{ marginTop: 4 }} /> : null}
         </View>
         <Mascot name={user?.mascot} variant="bust" size={96} />
       </View>
@@ -129,6 +129,11 @@ function TodayView() {
         </Card>
       )}
 
+      {!data && !error && (
+        <View style={st.stats}>
+          {[0, 1, 2].map(i => <Card key={i} style={{ flex: 1, gap: 8, padding: 12 }}><Bone w="70%" h={10} /><Bone w="50%" h={16} /></Card>)}
+        </View>
+      )}
       {data && (
         <View style={st.stats}>
           <Stat label="Serie" value={`${data.progress.streak} 🔥`} />
@@ -146,6 +151,7 @@ function TodayView() {
 
       <Card style={{ gap: 10 }}>
         <T variant="h2">Mein Tag</T>
+        {!data && !error && <RowBones />}
         {data && !data.items.length && (
           <View style={{ alignItems: 'center', paddingVertical: 12, gap: 6 }}>
             <Mascot name={user?.mascot} variant="head" size={64} />
@@ -232,7 +238,21 @@ function CalendarView({ mode }: { mode: 'tag' | 'liste' }) {
   useEffect(() => onSynced(() => { void reload(); }), [reload]);
   const swipe = useCallback((dir: 1 | -1) => { void Haptics.selectionAsync(); setSelected(d => (d ? addDays(d, dir) : d)); }, []);
 
-  if (!selected || !monday) return <View style={st.scroll}><ErrorBox text={error} /></View>;
+  if (!selected || !monday) {
+    return (
+      <View style={st.scroll}>
+        <ErrorBox text={error} />
+        {!error && (
+          <>
+            <View style={st.weekHead}><Bone w={24} h={24} r={12} /><Bone w={140} h={20} /><Bone w={24} h={24} r={12} /></View>
+            <View style={st.strip}>{Array.from({ length: 7 }, (_, i) => <View key={i} style={[st.day, { gap: 6 }]}><Bone w={18} h={10} /><Bone w={22} h={18} /></View>)}</View>
+            <Bone w={90} h={16} />
+            <Card style={{ gap: 10 }}><RowBones /></Card>
+          </>
+        )}
+      </View>
+    );
+  }
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const dayItems = (items ?? []).filter(i => i.date === selected || (i.date < selected && (i as Item & { endDate?: string }).endDate! >= selected && !i.allDay));
   const open = (i: Item) => router.push({ pathname: '/termin', params: { item: JSON.stringify(i) } });
@@ -282,11 +302,27 @@ function CalendarView({ mode }: { mode: 'tag' | 'liste' }) {
       {header}
       <View style={{ paddingHorizontal: 16 }}>
         <Card style={{ gap: 10 }}>
+          {!items && !error && <RowBones />}
           {items && !dayItems.length && <T variant="muted">Nichts eingetragen.</T>}
           {dayItems.map(i => <ItemRow key={i.key} item={i} onPress={() => open(i)} />)}
         </Card>
       </View>
     </ScrollView>
+  );
+}
+
+/** Placeholder rows shaped like ItemRow (time column, colored bar, title + subtitle). */
+function RowBones({ n = 3 }: { n?: number }) {
+  return (
+    <>
+      {Array.from({ length: n }, (_, i) => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 4 }}>
+          <Bone w={40} h={12} />
+          <Bone w={4} h={36} r={2} />
+          <View style={{ flex: 1, gap: 6 }}><Bone w={(['70%', '55%', '62%'] as const)[i % 3]} h={14} /><Bone w="35%" h={11} /></View>
+        </View>
+      ))}
+    </>
   );
 }
 
