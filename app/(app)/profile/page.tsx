@@ -43,7 +43,7 @@ export default async function ProfilePage() {
         ))}
       </nav>
 
-      <div className="grid gap-6 xl:grid-cols-2">
+      <div className="gap-6 xl:columns-2 [&>*]:mb-6 [&>*]:break-inside-avoid">
         <ProfileForm name={user.name} userType={user.userType} gender={user.gender} timezone={user.timezone} mascot={user.prefs.mascot} />
 
         <section className="card card-pad">

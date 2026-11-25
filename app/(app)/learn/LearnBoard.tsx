@@ -28,7 +28,7 @@ export function LearnBoard({ tasks, blocks, tz, today, subjects, mascot }: {
   const fmt = (iso: string) => { const z = utcToZoned(iso, tz); return { day: relativeDayDe(z.date, today), time: z.time, date: z.date }; };
 
   return (
-    <div className="grid gap-6 xl:grid-cols-[1.3fr_1fr]">
+    <div className="grid items-start gap-6 xl:grid-cols-[1.3fr_1fr]">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="h2 mr-auto">Anstehende Tests & Aufgaben</h2>

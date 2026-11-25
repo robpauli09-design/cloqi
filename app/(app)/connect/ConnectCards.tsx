@@ -79,12 +79,7 @@ export function ProviderCard({ provider, configured, conn, tz }: { provider: 'go
         [<ArrowDownToLine key="b" size={13} />, 'Berechtigungen', provider === 'google' ? 'Termine lesen & schreiben, Kalenderliste lesen' : 'Calendars.ReadWrite, offline_access'],
         [<ArrowUpFromLine key="c" size={13} />, 'Schnittstelle', provider === 'google' ? 'Google Calendar API, OAuth 2.0' : 'Microsoft Graph API, OAuth 2.0'],
       ]} />
-      {!configured && (
-        <p className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-[#8a4a0e]">
-          Auf diesem Server ist {name} noch nicht eingerichtet: Es fehlen {provider === 'google' ? 'GOOGLE_CLIENT_ID und GOOGLE_CLIENT_SECRET' : 'MICROSOFT_CLIENT_ID und MICROSOFT_CLIENT_SECRET'} (siehe README).
-          Es wird keine Verbindung vorgetäuscht.
-        </p>
-      )}
+      {!configured && <p className="rounded-xl bg-paper px-3 py-2 text-xs text-ink-soft">{name} ist bald verfügbar.</p>}
       {!conn ? (
         configured
           ? <a href={`/api/integrations/${provider}/start`} className="btn-primary self-start">Mit {provider === 'google' ? 'Google' : 'Microsoft'} verbinden</a>
@@ -159,11 +154,7 @@ export function SchoolCard({ configured, conn, stats, tz }: {
         [<Lock key="b" size={13} />, 'Nur lesen', 'CLOQI kann in Teams und OneNote nichts ändern, abgeben oder löschen – und sieht keine Noten'],
         [<ArrowLeftRight key="c" size={13} />, 'Anmeldung', 'Mit deiner Schul-E-Mail (Microsoft-Schulkonto)'],
       ]} />
-      {!configured && (
-        <p className="rounded-xl bg-warn-soft px-3 py-2 text-xs text-[#8a4a0e]">
-          Auf diesem Server noch nicht eingerichtet: Es fehlen MICROSOFT_CLIENT_ID und MICROSOFT_CLIENT_SECRET.
-        </p>
-      )}
+      {!configured && <p className="rounded-xl bg-paper px-3 py-2 text-xs text-ink-soft">Teams & OneNote ist bald verfügbar.</p>}
       {!conn ? (
         <>
           {configured

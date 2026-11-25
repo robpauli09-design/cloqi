@@ -115,7 +115,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           hint={d.trainingToday.length ? d.trainingToday[0].title : 'Kein Training'} />
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
+      <div className="grid items-start gap-6 xl:grid-cols-[1.4fr_1fr]">
         {/* My day */}
         <section className="card card-pad">
           <div className="flex items-center justify-between">

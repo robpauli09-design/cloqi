@@ -59,7 +59,7 @@ export function SportApp(props: {
 
       {summary ? <SummaryCard summary={summary} onClose={() => setSummary(null)} />
         : active ? <ActiveWorkout key={active.id} workout={active} last={props.last} onDone={() => router.refresh()} onFinished={s => { setSummary(s); router.refresh(); }} /> : (
-        <div className="grid gap-6 xl:grid-cols-[1.2fr_1fr]">
+        <div className="grid items-start gap-6 xl:grid-cols-[1.2fr_1fr]">
           <div className="space-y-6">
             <section className="card card-pad">
               <div className="flex items-center justify-between gap-3">

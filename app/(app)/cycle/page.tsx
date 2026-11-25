@@ -68,7 +68,7 @@ export default async function CyclePage() {
         </div>
       </header>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_1.1fr]">
+      <div className="grid items-start gap-6 xl:grid-cols-[1fr_1.1fr]">
         <CycleLog today={today} />
         <section className="card card-pad">
           <h2 className="h2">Die nächsten Wochen</h2>
