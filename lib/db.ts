@@ -108,6 +108,10 @@ const UPGRADES = [
      UNIQUE (user_id, kind, external_id))`,
   'ALTER TABLE school_items ENABLE ROW LEVEL SECURITY',
   "DO $$ BEGIN IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN REVOKE ALL ON public.school_items FROM anon, authenticated; END IF; END $$",
+  // study break ("bis Samstag nichts zum Lernen einplanen") and "CLOQI AI darf ohne Nachfrage löschen"
+  'ALTER TABLE study_settings ADD COLUMN IF NOT EXISTS pause_until date',
+  // how much CLOQI AI may do on its own: ask (before every change) · edit (default: changes, asks before deleting) · auto
+  "ALTER TABLE profiles ADD COLUMN IF NOT EXISTS ai_mode text NOT NULL DEFAULT 'edit' CHECK (ai_mode IN ('ask', 'edit', 'auto'))",
 ];
 
 const isoInstant =(x: string) => new Date(x.replace(' ', 'T').replace(/([+-]\d\d)$/, '$1:00')).toISOString();

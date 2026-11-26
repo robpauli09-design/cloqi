@@ -13,5 +13,5 @@ export default async function AiPage({ searchParams }: { searchParams: Promise<{
   const { q } = await searchParams;
   await ensureVault(user);
   // like ChatGPT/Claude: the AI tab opens with a fresh chat; older chats are in the history
-  return <Chat mascot={user.prefs.mascot} name={user.name} aiEnabled={Boolean(aiConfig())} initialText={typeof q === 'string' ? q.slice(0, 500) : undefined} />;
+  return <Chat mascot={user.prefs.mascot} name={user.name} aiEnabled={Boolean(aiConfig())} initialText={typeof q === 'string' ? q.slice(0, 500) : undefined} initialMode={user.prefs.aiMode} />;
 }

@@ -13,6 +13,9 @@ import { Markdown } from '@/components/Markdown';
 import { MascotAvatar, type MascotName } from '@/components/Mascot';
 import { toast, toastResult } from '@/components/Toaster';
 import { useRecorder } from '@/components/useRecorder';
+import { saveAiMode } from '@/app/actions/settings';
+import type { AiMode } from '@/lib/types';
+import { ModeSwitch, nextMode } from './ModeSwitch';
 
 interface Msg { id: string | number; from: 'user' | 'cloqi'; text: string; proposal?: Proposal; confirmLabel?: string; resolved?: boolean; actions?: string[]; error?: boolean; status?: string; streaming?: boolean; steps?: string[] }
 type StreamEvent = { type: 'thread'; id: string } | { type: 'status'; text: string } | { type: 'delta'; text: string } | { type: 'reset' } | { type: 'done'; ok: boolean; reply: string; actions: string[]; threadId: string | null };
@@ -59,7 +62,9 @@ async function readAttachment(file: File): Promise<Attachment> {
   return { name: file.name.replace(/\.[^.]+$/, '') + '.jpg', mime: 'image/jpeg', data: url.split(',')[1], preview: url };
 }
 
-export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotName; name: string; aiEnabled: boolean; initialText?: string }) {
+export function Chat({ mascot, name, aiEnabled, initialText, initialMode = 'edit' }: { mascot: MascotName; name: string; aiEnabled: boolean; initialText?: string; initialMode?: AiMode }) {
+  const [mode, setMode] = useState<AiMode>(initialMode);
+  const changeMode = useCallback((m: AiMode) => { setMode(m); void saveAiMode(m); }, []);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [text, setText] = useState(initialText ?? '');
@@ -363,6 +368,13 @@ export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotN
                   <button className="btn-ghost btn-sm" disabled={pending} onClick={() => confirm(m, false)}>Nein</button>
                 </div>
               )}
+              {/* the server's delete question → one tap instead of typing „Ja“ (only on the latest answer) */}
+              {!m.streaming && m === messages[messages.length - 1] && /Antworte mit „Ja“\.\s*$/.test(m.text) && (
+                <div className="mt-3 flex gap-2">
+                  <button className="btn-primary btn-sm" disabled={busy} onClick={() => send('Ja')}><Check size={14} /> {/löschen\? Antworte/.test(m.text) ? 'Ja, löschen' : 'Ja, mach das'}</button>
+                  <button className="btn-ghost btn-sm" disabled={busy} onClick={() => send('Nein')}>Nein</button>
+                </div>
+              )}
             </div>
           </div>
         ))}
@@ -440,7 +452,10 @@ export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotN
                 <Plus size={21} />
               </button>
               <textarea ref={input} value={text} onChange={e => setText(e.target.value)} maxLength={2000} rows={1} aria-label="Nachricht an CLOQI"
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text); } }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(text); }
+                  if (e.key === 'Tab' && e.shiftKey && aiEnabled) { e.preventDefault(); changeMode(nextMode(mode)); }
+                }}
                 placeholder="Schreib CLOQI …" className="max-h-40 min-w-0 flex-1 resize-none bg-transparent px-1 py-2.5 text-sm outline-none" />
               {canSend ? (
                 <button className="grid h-10 w-10 shrink-0 animate-pop place-items-center rounded-full bg-leaf-dark text-white" aria-label="Senden"><ArrowUp size={19} /></button>
@@ -453,6 +468,7 @@ export function Chat({ mascot, name, aiEnabled, initialText }: { mascot: MascotN
             </form>
           )}
         </div>
+        {aiEnabled && <div className="mt-1.5 flex items-center px-2"><ModeSwitch mode={mode} onChange={changeMode} /></div>}
       </div>
 
       {historyOpen && (

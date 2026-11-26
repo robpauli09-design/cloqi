@@ -10,6 +10,14 @@ const TOKEN_KEY = 'cloqi.session';
 export type Gender = 'm' | 'w' | 'd';
 export type MascotName = 'cloki' | 'clea';
 
+/** ask = before every change · edit = changes directly, asks before deleting · auto = deletes too */
+export type AiMode = 'ask' | 'edit' | 'auto';
+export const AI_MODES: { id: AiMode; label: string; hint: string; icon: 'hand-left-outline' | 'create-outline' | 'play-forward-outline' }[] = [
+  { id: 'ask', label: 'Nachfragen', hint: 'CLOQI fragt vor jeder Änderung an Kalender, Learn und Sport.', icon: 'hand-left-outline' },
+  { id: 'edit', label: 'Automatisch eintragen', hint: 'Trägt ein und verschiebt selbst – fragt nur vor dem Löschen.', icon: 'create-outline' },
+  { id: 'auto', label: 'Auto', hint: 'Erledigt alles selbst, auch Löschen. Stoppt bei Riskantem (Wissen löschen, fremde Inhalte).', icon: 'play-forward-outline' },
+];
+
 export interface AppUser {
   id: string;
   email: string;
@@ -21,6 +29,8 @@ export interface AppUser {
   mascot: MascotName;
   cycleEnabled: boolean;
   dailyGoalMin: number;
+  /** CLOQI AI mode (older servers: missing = edit) */
+  aiMode?: AiMode;
 }
 
 export interface Item {

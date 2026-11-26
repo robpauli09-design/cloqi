@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS profiles (
   timezone           text NOT NULL DEFAULT 'Europe/Vienna',
   mascot             text NOT NULL DEFAULT 'cloki' CHECK (mascot IN ('cloki', 'clea')),
   nav_tabs           text,                              -- chosen areas, e.g. 'learn,life,sport,vault' (null = defaults)
+  ai_mode            text NOT NULL DEFAULT 'edit' CHECK (ai_mode IN ('ask', 'edit', 'auto')), -- CLOQI AI: ask before changes · edit · auto (also deletes)
   life_areas         jsonb NOT NULL DEFAULT '[]'::jsonb,      -- ["schule","training",...]
   onboarded_at       timestamptz,
   cycle_enabled      boolean NOT NULL DEFAULT false,
@@ -91,6 +92,7 @@ CREATE TABLE IF NOT EXISTS study_settings (
   break_minutes             smallint NOT NULL DEFAULT 15  CHECK (break_minutes BETWEEN 0 AND 60),
   daily_goal_minutes        smallint NOT NULL DEFAULT 45  CHECK (daily_goal_minutes BETWEEN 0 AND 480),
   default_reminder_minutes  smallint NOT NULL DEFAULT 15  CHECK (default_reminder_minutes BETWEEN 0 AND 1440),
+  pause_until               date,                         -- study break: no study blocks up to and including this day
   updated_at                timestamptz NOT NULL DEFAULT now(),
   CHECK (weekday_end > weekday_start AND weekend_end > weekend_start)
 );

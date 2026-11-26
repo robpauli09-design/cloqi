@@ -8,7 +8,7 @@ import * as Haptics from 'expo-haptics';
 import {
   RecordingPresets, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioRecorder, useAudioRecorderState,
 } from 'expo-audio';
-import { api, apiStream, errorText, type ChatMessage } from '@/api';
+import { AI_MODES, api, apiStream, errorText, type AiMode, type AppUser, type ChatMessage } from '@/api';
 import { useAuth } from '@/auth';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChatMarkdown } from '@/components/ChatMarkdown';
@@ -42,6 +42,17 @@ export default function Ai() {
   const [menu, setMenu] = useState(false);
   const [history, setHistory] = useState<Thread[] | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const { setUser } = useAuth();
+  const [modeOpen, setModeOpen] = useState(false);
+  const mode: AiMode = user?.aiMode ?? 'edit';
+  const curMode = AI_MODES.find(m => m.id === mode)!;
+  const changeMode = (m: AiMode) => {
+    setModeOpen(false);
+    if (!user || m === mode) return;
+    void Haptics.selectionAsync();
+    setUser({ ...user, aiMode: m }); // instant; the server keeps it for the website too
+    api<AppUser>('/me', { method: 'PATCH', body: { aiMode: m } }).catch(() => setUser(user));
+  };
   const list = useRef<FlatList<Msg>>(null);
 
   // voice: record → transcribe on the server → text lands in the input
@@ -271,6 +282,17 @@ export default function Ai() {
                   {item.actions.map((a, i) => <T key={i} variant="small" style={st.action}>✓ {a}</T>)}
                 </View>
               )}
+              {/* the server's delete question → one tap instead of typing „Ja“ (only on the latest answer) */}
+              {item.role !== 'user' && !item.streaming && item === messages[messages.length - 1] && /Antworte mit „Ja“\.\s*$/.test(item.content) && (
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+                  <Pressable disabled={busy} onPress={() => void send('Ja')} accessibilityRole="button" style={[st.quickYes, busy && { opacity: 0.5 }]}>
+                    <T style={{ color: colors.white, fontFamily: font.semibold, fontSize: 14 }}>{/löschen\? Antworte/.test(item.content) ? 'Ja, löschen' : 'Ja, mach das'}</T>
+                  </Pressable>
+                  <Pressable disabled={busy} onPress={() => void send('Nein')} accessibilityRole="button" style={st.quickNo}>
+                    <T style={{ color: colors.inkSoft, fontFamily: font.semibold, fontSize: 14 }}>Nein</T>
+                  </Pressable>
+                </View>
+              )}
             </View>
           )}
         />
@@ -326,8 +348,35 @@ export default function Ai() {
               )}
             </View>
           )}
+          {enabled && (
+            <Pressable onPress={() => setModeOpen(true)} hitSlop={6} accessibilityRole="button" accessibilityLabel={`Modus: ${curMode.label}. Ändern`} style={st.modeChip}>
+              <Ionicons name={curMode.icon} size={13} color={mode === 'auto' ? colors.ai : mode === 'ask' ? '#A55912' : colors.inkSoft} />
+              <T style={{ fontSize: 12, fontFamily: font.semibold, color: mode === 'auto' ? colors.ai : mode === 'ask' ? '#A55912' : colors.inkSoft }}>{curMode.label}</T>
+              <Ionicons name="chevron-up" size={12} color={colors.inkFaint} />
+            </Pressable>
+          )}
         </View>
       </KeyboardAvoidingView>
+
+      {/* mode: how much CLOQI does on its own (like Claude/ChatGPT) */}
+      <Modal visible={modeOpen} transparent animationType="slide" onRequestClose={() => setModeOpen(false)}>
+        <Pressable style={st.backdrop} onPress={() => setModeOpen(false)} />
+        <View style={[st.sheet, { paddingBottom: insets.bottom + 12 }]}>
+          <View style={st.grabber} />
+          <T variant="eyebrow" style={{ paddingHorizontal: 8, paddingBottom: 4 }}>Modus</T>
+          {AI_MODES.map(m => (
+            <Pressable key={m.id} onPress={() => changeMode(m.id)} accessibilityRole="radio" accessibilityState={{ checked: m.id === mode }}
+              style={({ pressed }) => [st.option, { alignItems: 'flex-start' }, (pressed || m.id === mode) && { backgroundColor: colors.leafSoft }]}>
+              <Ionicons name={m.icon} size={20} color={colors.leafDark} style={{ marginTop: 2 }} />
+              <View style={{ flex: 1, gap: 2 }}>
+                <T style={{ fontFamily: font.semibold, fontSize: 16 }}>{m.label}</T>
+                <T variant="small" style={{ color: colors.inkSoft }}>{m.hint}</T>
+              </View>
+              {m.id === mode && <Ionicons name="checkmark" size={20} color={colors.leafDark} />}
+            </Pressable>
+          ))}
+        </View>
+      </Modal>
 
       {/* + menu */}
       <Modal visible={menu} transparent animationType="slide" onRequestClose={() => setMenu(false)}>
@@ -386,6 +435,9 @@ export default function Ai() {
 }
 
 const st = StyleSheet.create({
+  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', paddingHorizontal: 8, paddingTop: 6, paddingBottom: 2 },
+  quickYes: { backgroundColor: colors.leafDark, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
+  quickNo: { borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, borderRadius: 999, paddingHorizontal: 16, paddingVertical: 9 },
   head: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.line, gap: 2 },
   title: { flex: 1, fontFamily: font.display, fontSize: 18, lineHeight: 24 },
   headBtn: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },

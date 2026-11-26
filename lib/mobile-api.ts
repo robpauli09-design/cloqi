@@ -38,7 +38,7 @@ export async function body(req: Request, maxChars = 20000): Promise<Record<strin
 export function appUser(u: User) {
   return {
     id: u.id, email: u.email, name: u.name, userType: u.userType, gender: u.gender, timezone: u.timezone,
-    onboarded: u.onboarded, mascot: u.prefs.mascot, cycleEnabled: u.prefs.cycleEnabled, dailyGoalMin: u.prefs.dailyGoalMin,
+    onboarded: u.onboarded, mascot: u.prefs.mascot, cycleEnabled: u.prefs.cycleEnabled, dailyGoalMin: u.prefs.dailyGoalMin, aiMode: u.prefs.aiMode,
   };
 }
 

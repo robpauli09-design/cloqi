@@ -34,7 +34,7 @@ export interface PlanInput {
   tz: string;
   tasks: PlanTask[];
   busy: Interval[];
-  prefs: Pick<Prefs, 'studyStart' | 'studyEnd' | 'weekendStart' | 'weekendEnd' | 'studyOnSunday' | 'maxStudyPerDay' | 'blockMax' | 'breakMin'>;
+  prefs: Pick<Prefs, 'studyStart' | 'studyEnd' | 'weekendStart' | 'weekendEnd' | 'studyOnSunday' | 'maxStudyPerDay' | 'blockMax' | 'breakMin'> & { studyPauseUntil?: string | null };
 }
 
 const STEP = 15;
@@ -50,6 +50,7 @@ export function estimateMinutes(kind: string, difficulty: 1 | 2 | 3): number {
 function dayWindow(date: string, tz: string, prefs: PlanInput['prefs']): Interval | null {
   const wd = weekdayOf(date);
   if (wd === 7 && !prefs.studyOnSunday) return null;
+  if (prefs.studyPauseUntil && date <= prefs.studyPauseUntil) return null; // study break
   const [from, to] = wd >= 6 ? [prefs.weekendStart, prefs.weekendEnd] : [prefs.studyStart, prefs.studyEnd];
   if (timeToMinutes(to) <= timeToMinutes(from)) return null;
   return { start: zonedToUtc(date, from, tz).getTime(), end: zonedToUtc(date, to, tz).getTime() };
@@ -159,7 +160,7 @@ export function planStudy(input: PlanInput): PlanResult {
 
 /** Free slots inside a day's study window (used for "Wann habe ich Zeit?"). */
 export function freeSlots(date: string, tz: string, busy: Interval[], prefs: PlanInput['prefs'], now: Date): Interval[] {
-  const window = dayWindow(date, tz, prefs) ?? (() => {
+  const window = dayWindow(date, tz, { ...prefs, studyPauseUntil: null }) ?? (() => { // free time exists during a study break too
     const s = zonedToUtc(date, prefs.weekendStart, tz).getTime();
     return { start: s, end: zonedToUtc(date, prefs.weekendEnd, tz).getTime() };
   })();

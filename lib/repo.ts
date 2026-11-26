@@ -4,7 +4,7 @@ import { decrypt, encrypt } from './crypto';
 import { queryStems, scoreNote } from './vault-links';
 import {
   DEFAULT_PREFS, type CalendarConnection, type CalendarEvent, type CalendarKind, type Category, type CycleEntry, type Prefs, type Provider,
-  type StudyBlock, type Subject, type Suggestion, type Task, type TimetableEntry, type User, type UserCalendar, parseTabs, DEFAULT_TABS } from './types';
+  type StudyBlock, type Subject, type Suggestion, type Task, type TimetableEntry, type User, type UserCalendar, parseTabs, parseAiMode, DEFAULT_TABS } from './types';
 
 const str = (v: unknown) => (v === null || v === undefined ? null : String(v));
 /** jsonb arrives parsed; tolerate strings too. */
@@ -26,10 +26,18 @@ const run = async (sql: string, p: Param[] = []) => (await db()).run(sql, p);
 const USER_SELECT = `
   SELECT u.id, u.email, u.password_hash, u.created_at,
          p.display_name, p.user_type, p.gender, p.timezone, p.mascot, p.life_areas, p.onboarded_at,
-         p.cycle_enabled, p.cycle_in_calendar, p.nav_tabs,
+         p.cycle_enabled, p.cycle_in_calendar, p.nav_tabs, p.ai_mode,
          s.weekday_start, s.weekday_end, s.weekend_start, s.weekend_end, s.study_on_sunday, s.max_minutes_per_day,
-         s.max_block_minutes, s.break_minutes, s.daily_goal_minutes, s.default_reminder_minutes
+         s.max_block_minutes, s.break_minutes, s.daily_goal_minutes, s.default_reminder_minutes, s.pause_until
   FROM users u JOIN profiles p ON p.user_id = u.id JOIN study_settings s ON s.user_id = u.id`;
+
+/** pause_until comes back as a Date (postgres) or string (PGlite) – normalize to YYYY-MM-DD. */
+function pauseDate(v: unknown): string | null {
+  if (!v) return null;
+  if (v instanceof Date) return `${v.getUTCFullYear()}-${String(v.getUTCMonth() + 1).padStart(2, '0')}-${String(v.getUTCDate()).padStart(2, '0')}`;
+  const s = String(v).slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+}
 
 async function toUser(r: Row): Promise<User> {
   const subjects = (await all('SELECT name, difficulty FROM subjects WHERE user_id = ? ORDER BY lower(name)', [String(r.id)]))
@@ -42,6 +50,7 @@ async function toUser(r: Row): Promise<User> {
     dailyGoalMin: Number(r.daily_goal_minutes), reminderDefault: Number(r.default_reminder_minutes),
     subjects, mascot: r.mascot === 'clea' ? 'clea' : 'cloki',
     cycleEnabled: Boolean(r.cycle_enabled), cycleInCalendar: Boolean(r.cycle_in_calendar), navTabs: parseTabs(r.nav_tabs),
+    studyPauseUntil: pauseDate(r.pause_until), aiMode: parseAiMode(r.ai_mode),
   };
   return {
     id: String(r.id), email: String(r.email), name: String(r.display_name ?? ''),
@@ -92,15 +101,15 @@ export async function updateUser(id: string, patch: Partial<Pick<User, 'name' | 
   if (patch.lifeAreas !== undefined) { sets.push('life_areas = ?'); vals.push(JSON.stringify(patch.lifeAreas)); }
   const p = patch.prefs;
   if (p) {
-    sets.push('mascot = ?', 'cycle_enabled = ?', 'cycle_in_calendar = ?', 'nav_tabs = ?');
-    vals.push(p.mascot, p.cycleEnabled, p.cycleInCalendar, (p.navTabs ?? DEFAULT_TABS).join(','));
+    sets.push('mascot = ?', 'cycle_enabled = ?', 'cycle_in_calendar = ?', 'nav_tabs = ?', 'ai_mode = ?');
+    vals.push(p.mascot, p.cycleEnabled, p.cycleInCalendar, (p.navTabs ?? DEFAULT_TABS).join(','), parseAiMode(p.aiMode));
   }
   await (await db()).tx(async q => {
     if (sets.length) await q.run(`UPDATE profiles SET ${sets.join(', ')} WHERE user_id = ?`, [...vals, id]);
     if (!p) return;
     await q.run(`UPDATE study_settings SET weekday_start = ?, weekday_end = ?, weekend_start = ?, weekend_end = ?, study_on_sunday = ?,
-      max_minutes_per_day = ?, max_block_minutes = ?, break_minutes = ?, daily_goal_minutes = ?, default_reminder_minutes = ? WHERE user_id = ?`,
-    [p.studyStart, p.studyEnd, p.weekendStart, p.weekendEnd, p.studyOnSunday, p.maxStudyPerDay, p.blockMax, p.breakMin, p.dailyGoalMin, p.reminderDefault, id]);
+      max_minutes_per_day = ?, max_block_minutes = ?, break_minutes = ?, daily_goal_minutes = ?, default_reminder_minutes = ?, pause_until = ? WHERE user_id = ?`,
+    [p.studyStart, p.studyEnd, p.weekendStart, p.weekendEnd, p.studyOnSunday, p.maxStudyPerDay, p.blockMax, p.breakMin, p.dailyGoalMin, p.reminderDefault, p.studyPauseUntil ?? null, id]);
     // subjects: replace the set (small list, keeps ids stable for unchanged names)
     const names = p.subjects.map(s => s.name.toLowerCase());
     const existing = await q.all('SELECT id, name FROM subjects WHERE user_id = ?', [id]);
@@ -692,7 +701,11 @@ export async function createThread(userId: string, title: string): Promise<strin
 }
 
 /** A deletion CLOQI asked the user to confirm – stored server-side, consumed by the next message. */
-export interface PendingDeletion { key: string; label: string }
+/**
+ * Something CLOQI AI asked the user about. group = "Lernblock|Mi 16:45" bundles study blocks in the question;
+ * call = a change held back in the mode „Nachfragen“ – after „Ja“ the server runs exactly this call.
+ */
+export interface PendingDeletion { key: string; label: string; group?: string; call?: { name: string; args: string } }
 
 export async function takePendingDeletions(userId: string, threadId: string): Promise<PendingDeletion[]> {
   const r = await get('SELECT pending FROM chat_threads WHERE id = ? AND user_id = ?', [threadId, userId]);
@@ -702,7 +715,7 @@ export async function takePendingDeletions(userId: string, threadId: string): Pr
 }
 
 export async function setPendingDeletions(userId: string, threadId: string, list: PendingDeletion[]) {
-  await run('UPDATE chat_threads SET pending = ? WHERE id = ? AND user_id = ?', [JSON.stringify(list.slice(0, 10)), threadId, userId]);
+  await run('UPDATE chat_threads SET pending = ? WHERE id = ? AND user_id = ?', [JSON.stringify(list.slice(0, 40)), threadId, userId]);
 }
 
 export async function deleteThread(userId: string, id: string) {

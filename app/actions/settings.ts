@@ -17,8 +17,8 @@ import {
   setSuggestionStatus, setTimetableExdates, updateUser, upsertConnection,
 } from '@/lib/repo';
 import { freeSlots } from '@/lib/scheduler';
-import { isValidDate, isValidTime, todayIn, utcToZoned } from '@/lib/time';
-import { CATEGORIES, GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Category, type Gender, type Prefs, type Subject, type User, type UserType, OPTIONAL_TABS } from '@/lib/types';
+import { addDays, isValidDate, isValidTime, todayIn, utcToZoned } from '@/lib/time';
+import { CATEGORIES, GENDER_LABELS, mascotFor, parseAiMode, type AiMode, USER_TYPE_LABELS, type Category, type Gender, type Prefs, type Subject, type User, type UserType, OPTIONAL_TABS } from '@/lib/types';
 import { fail, InputError, int, text, time, type ActionResult } from '@/lib/validate';
 import { autoSyncFor } from '@/lib/auto-sync';
 import { normalizeWebUntisUrl, syncWebUntis, upsertFeedEvents, fetchCalendar, isWebUntisHost } from '@/lib/webuntis';
@@ -83,9 +83,16 @@ export async function savePrefs(_prev: ActionResult | null, form: FormData): Pro
       maxStudyPerDay: int(form, 'maxStudyPerDay', 30, 480), blockMax: int(form, 'blockMax', 15, 180),
       breakMin: int(form, 'breakMin', 0, 60), dailyGoalMin: int(form, 'dailyGoalMin', 0, 480),
       reminderDefault: int(form, 'reminderDefault', 0, 1440),
+      aiMode: form.has('aiMode') ? parseAiMode(form.get('aiMode')) : user.prefs.aiMode,
     };
+    const pause = String(form.get('studyPauseUntil') ?? '').trim();
+    const today = todayIn(user.timezone);
+    if (pause && (!isValidDate(pause) || pause > addDays(today, 60))) throw new InputError('Die Lernpause darf höchstens 60 Tage dauern.');
+    prefs.studyPauseUntil = pause && pause >= today ? pause : null;
     if (prefs.studyEnd <= prefs.studyStart || prefs.weekendEnd <= prefs.weekendStart) throw new InputError('Das Ende der Lernzeit muss nach dem Beginn liegen.');
     await updateUser(user.id, { prefs });
+    // a new/changed study break or study window moves the study blocks right away
+    if (prefs.studyPauseUntil !== user.prefs.studyPauseUntil) await applyPlan({ ...user, prefs }, await proposePlan({ ...user, prefs }, { kind: 'all' }));
     return done('Lernpräferenzen gespeichert.');
   } catch (e) { return fail(e); }
 }
@@ -439,5 +446,14 @@ export async function saveTabs(tabs: string[]): Promise<ActionResult> {
     const chosen = OPTIONAL_TABS.filter(t => tabs.includes(t));
     await updateUser(user.id, { prefs: { ...user.prefs, navTabs: chosen } });
     return done('Bereiche gespeichert.');
+  } catch (e) { return fail(e); }
+}
+
+/** Mode switch in the chat (Nachfragen · Automatisch eintragen · Auto). */
+export async function saveAiMode(mode: AiMode): Promise<ActionResult> {
+  try {
+    const user = await requireUser();
+    await updateUser(user.id, { prefs: { ...user.prefs, aiMode: parseAiMode(mode) } });
+    return done('Modus gespeichert.');
   } catch (e) { return fail(e); }
 }

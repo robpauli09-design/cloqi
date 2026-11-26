@@ -66,6 +66,15 @@ export const DEFAULT_TABS: OptionalTab[] = ['learn', 'life', 'sport', 'vault'];
 export const parseTabs = (v: unknown): OptionalTab[] =>
   typeof v === 'string' ? v.split(',').filter((x): x is OptionalTab => (OPTIONAL_TABS as readonly string[]).includes(x)) : [...DEFAULT_TABS];
 
+/** ask = before every change · edit = changes directly, asks before deleting · auto = deletes too (stops for risky things) */
+export type AiMode = 'ask' | 'edit' | 'auto';
+export const AI_MODES: { id: AiMode; label: string; hint: string }[] = [
+  { id: 'ask', label: 'Nachfragen', hint: 'CLOQI fragt vor jeder Änderung an Kalender, Learn und Sport.' },
+  { id: 'edit', label: 'Automatisch eintragen', hint: 'Trägt ein und verschiebt selbst – fragt nur vor dem Löschen.' },
+  { id: 'auto', label: 'Auto', hint: 'Erledigt alles selbst, auch Löschen. Stoppt bei Riskantem (Wissen löschen, fremde Inhalte).' },
+];
+export const parseAiMode = (v: unknown): AiMode => (v === 'ask' || v === 'auto' ? v : 'edit');
+
 export interface Prefs {
   studyStart: string;        // weekday earliest study time, HH:MM
   studyEnd: string;          // weekday latest end of study, HH:MM
@@ -82,6 +91,10 @@ export interface Prefs {
   cycleEnabled: boolean;
   cycleInCalendar: boolean;
   navTabs: OptionalTab[];
+  /** Study break: no study blocks up to and including this day (YYYY-MM-DD). */
+  studyPauseUntil: string | null;
+  /** How much CLOQI AI does on its own (switch in the chat, like Claude/ChatGPT modes). */
+  aiMode: AiMode;
 }
 
 export const DEFAULT_PREFS: Prefs = {
@@ -100,6 +113,8 @@ export const DEFAULT_PREFS: Prefs = {
   cycleEnabled: false,
   cycleInCalendar: false,
   navTabs: [...DEFAULT_TABS],
+  studyPauseUntil: null,
+  aiMode: 'edit',
 };
 
 export interface User {

@@ -1,6 +1,6 @@
 import { getUser, updateUser } from '@/lib/repo';
 import { appUser, body, json, withUser } from '@/lib/mobile-api';
-import { GENDER_LABELS, mascotFor, USER_TYPE_LABELS, type Gender, type UserType } from '@/lib/types';
+import { GENDER_LABELS, mascotFor, parseAiMode, USER_TYPE_LABELS, type Gender, type UserType } from '@/lib/types';
 import { InputError } from '@/lib/validate';
 
 export const GET = withUser(async user => json(appUser(user)));
@@ -19,7 +19,7 @@ export const PATCH = withUser(async (user, req) => {
     name, gender,
     userType: t in USER_TYPE_LABELS ? t as UserType : user.userType,
     ...(b.onboarded === true ? { onboarded: true } : {}),
-    prefs: { ...user.prefs, mascot: mascotFor(gender, chosen) },
+    prefs: { ...user.prefs, mascot: mascotFor(gender, chosen), aiMode: b.aiMode === undefined ? user.prefs.aiMode : parseAiMode(b.aiMode) },
   });
   return json(appUser((await getUser(user.id))!));
 });

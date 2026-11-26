@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { Bell, Download, LogOut, ShieldCheck, Trash2, X } from 'lucide-react';
 import { logout } from '@/app/actions/auth';
 import { addSubject, deleteAccount, removeSubject, saveProfile, savePrefs, saveTabs, setCycleInCalendar, setCycleModule } from '@/app/actions/settings';
-import { GENDER_LABELS, mascotFor, OPTIONAL_TABS, TAB_INFO, USER_TYPE_LABELS, type Gender, type OptionalTab, type Prefs, type Subject, type UserType } from '@/lib/types';
+import { AI_MODES, GENDER_LABELS, mascotFor, OPTIONAL_TABS, TAB_INFO, USER_TYPE_LABELS, type Gender, type OptionalTab, type Prefs, type Subject, type UserType } from '@/lib/types';
 import { Mascot, type MascotName } from '@/components/Mascot';
 import { toastResult } from '@/components/Toaster';
 import { FormMessage, SubmitButton, Toggle } from '@/components/ui';
@@ -87,7 +87,22 @@ export function PrefsForm({ prefs }: { prefs: Prefs }) {
         <div><label className="label" htmlFor="pr-break">Pause vor/nach Terminen (Min)</label><input id="pr-break" name="breakMin" type="number" min={0} max={60} step={5} defaultValue={prefs.breakMin} className="input" /></div>
         <div><label className="label" htmlFor="pr-goal">Tagesziel Lernzeit (Min)</label><input id="pr-goal" name="dailyGoalMin" type="number" min={0} max={480} step={5} defaultValue={prefs.dailyGoalMin} className="input" /></div>
         <div className="col-span-2"><label className="label" htmlFor="pr-rem">Standard-Erinnerung (Minuten vorher)</label><input id="pr-rem" name="reminderDefault" type="number" min={0} max={1440} defaultValue={prefs.reminderDefault} className="input" /></div>
+        <div className="col-span-2">
+          <label className="label" htmlFor="pr-pause">Lernpause bis (optional)</label>
+          <input id="pr-pause" name="studyPauseUntil" type="date" defaultValue={prefs.studyPauseUntil ?? ''} className="input" />
+          <p className="mt-1 text-xs text-ink-faint">Bis einschließlich diesem Tag plant CLOQI keine Lernblöcke – geplante wandern dahinter. Leer lassen = keine Pause.</p>
+        </div>
       </div>
+      <fieldset className="space-y-1.5">
+        <legend className="label">CLOQI AI darf …</legend>
+        {AI_MODES.map(m => (
+          <label key={m.id} className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-line p-3 text-sm has-[:checked]:border-leaf has-[:checked]:bg-leaf-soft/60">
+            <input type="radio" name="aiMode" value={m.id} defaultChecked={prefs.aiMode === m.id} className="mt-0.5 h-4 w-4 shrink-0 accent-[#286B24]" />
+            <span><span className="font-medium">{m.label}</span><span className="block text-xs text-ink-soft">{m.hint}</span></span>
+          </label>
+        ))}
+        <p className="text-xs text-ink-faint">Auch direkt im Chat umschaltbar (Shift + Tab).</p>
+      </fieldset>
       <FormMessage state={state} />
       <SubmitButton>Speichern</SubmitButton>
     </form>
