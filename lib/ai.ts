@@ -10,7 +10,7 @@ import { addDays, formatDateDe, isValidDate, isValidTime, todayIn, utcToZoned, w
 import { AI_MODES, CATEGORIES, CATEGORY_META, cycleAvailable, TASK_KIND_LABELS, type AiMode, type Category, type TaskKind, type User } from './types';
 import { syncWebUntis } from './webuntis';
 import { searchCalendarItems } from './calendar-search';
-import { wantsDelete } from './delete-intent';
+import { deleteIntent, wantsReorganize } from './delete-intent';
 import { exerciseProgress, listTemplates, listWorkouts, logWorkout, saveTemplate, scheduleTemplate, weekStats } from './sport';
 import { EXERCISES, setLabel } from './sport-data';
 import { aiCanWrite, CLOQI_IDENTITY, ensureVault, normalizePath, readVault, readVaultFile } from './vault';
@@ -103,9 +103,11 @@ const YES = /^\s*(ja|jo|jap|jep|yes|ok(ay)?|passt|gerne?|bitte|mach( das| es)?|k
  */
 function deleteAllowed(ctx: Ctx, key: string, label: string, group?: string): boolean {
   // „Nachfragen“: even an explicit „lösch …“ gets the confirmation question first
-  if (ctx.mode !== 'ask' && wantsDelete(ctx.userMessage)) return true;
-  // „Auto“: no question – but never for the vault and never after foreign content was read in this turn
-  if (ctx.mode === 'auto' && !ctx.untrusted && !key.startsWith('vault:')) return true;
+  const intent = ctx.mode === 'ask' ? null : deleteIntent(ctx.userMessage);
+  if (intent === 'explicit' || (intent === 'implicit' && !key.startsWith('vault:'))) return true;
+  // „Auto“: when the user's OWN message asks to reorganise, CLOQI may drop its own study blocks without a question.
+  // Never other entries: imported titles/notes are in the model's context and could otherwise trigger deletions.
+  if (ctx.mode === 'auto' && !ctx.untrusted && key.startsWith('block:') && wantsReorganize(ctx.userMessage)) return true;
   if (YES.test(ctx.userMessage) && ctx.pending.some(p => p.key === key)) return true;
   if (!ctx.ask.some(p => p.key === key)) ctx.ask.push({ key, label, ...(group ? { group } : {}) });
   return false;

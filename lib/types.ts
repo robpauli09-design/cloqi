@@ -71,7 +71,7 @@ export type AiMode = 'ask' | 'edit' | 'auto';
 export const AI_MODES: { id: AiMode; label: string; hint: string }[] = [
   { id: 'ask', label: 'Nachfragen', hint: 'CLOQI fragt vor jeder Änderung an Kalender, Learn und Sport.' },
   { id: 'edit', label: 'Automatisch eintragen', hint: 'Trägt ein und verschiebt selbst – fragt nur vor dem Löschen.' },
-  { id: 'auto', label: 'Auto', hint: 'Erledigt alles selbst, auch Löschen. Stoppt bei Riskantem (Wissen löschen, fremde Inhalte).' },
+  { id: 'auto', label: 'Auto', hint: 'Macht mehr selbst: räumt beim Umplanen seine Lernblöcke ohne Nachfrage weg. Andere Termine und dein Wissen löscht es nur, wenn du es sagst.' },
 ];
 export const parseAiMode = (v: unknown): AiMode => (v === 'ask' || v === 'auto' ? v : 'edit');
 
